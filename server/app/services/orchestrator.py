@@ -1,7 +1,7 @@
 import asyncio
 import time
 import json
-from ..state import get_state
+from ..state import claim_action, get_state
 from ..streaming.event_bus import event_bus
 from .patch_validator import FIXTURE, validate_candidate, rank_and_select_winner
 from .cerebras_service import cerebras_client
@@ -89,6 +89,10 @@ async def run_incident_orchestration(incident_id):
         if winner is None:
             raise RuntimeError('All candidates failed execution. No PR created.')
         if state['publish']:
+            if not claim_action(incident_id, 'github-publication'):
+                emit('publishing_failed', status='PUBLISH_FAILED',
+                     error='Publication was already attempted for this incident.', pr_url=None)
+                return
             try:
                 publishing = await create_draft_pull_request(incident_id, source, winner)
             except Exception as exc:

@@ -58,14 +58,14 @@ Use `server/.venv` on Windows; the bundled `server/venv` is from another OS.
 
 ## Execution choices
 
-- **Live** (default): reproduce against supplied source; call five Cerebras
+- **Live**: reproduce against supplied source; call five Cerebras
   roles concurrently (Trace Analyst, Git Detective, Infra Checker, Impact
   Analyst, and Mitigation Planner) with source, actual error output and contract;
   persist each result as it arrives; call
   Codex through the OpenAI Responses API for complete candidate files; execute
   each candidate against the immutable suite. Missing credentials, provider
   HTTP errors, malformed output and timeouts fail the run visibly. No fallback.
-- **Offline fixture**: named bad/correct files replace model calls, but run the
+- **Offline fixture** (default): named bad/correct files replace model calls, but run the
   same real validator. This is explicitly labeled and cannot publish PRs.
 - **Infrastructure fixture**: supplied 503 gateway telemetry returns mitigation
   and stops before analysis, patch generation, execution or publication. It is
@@ -158,5 +158,7 @@ Provider references: [Cerebras Chat Completions](https://inference-docs.cerebras
 
 Demo handoff: [live setup checklist](docs/Live%20Demo%20Setup.md) and
 [three-minute demo script](docs/Three%20Minute%20Demo%20Script.md).
+The implemented component boundaries and recovery behavior are documented in
+[architecture](docs/Architecture.md).
 The latest credential-free walkthrough is recorded in
 [offline rehearsal evidence](server/evidence/offline-rehearsal.md).

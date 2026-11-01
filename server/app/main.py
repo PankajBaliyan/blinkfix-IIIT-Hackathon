@@ -3,7 +3,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
-from .database import init_db
 from .services.cerebras_service import cerebras_client
 from .routes import incident, stream, health
 from .state import initialize, recover_interrupted
@@ -17,9 +16,7 @@ logger = logging.getLogger("blinkfix.main")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Initialize SQLite database file
     logger.info("Starting up Blinkfix Swarm Zero API server...")
-    init_db()
     initialize()
     recover_interrupted()
     yield

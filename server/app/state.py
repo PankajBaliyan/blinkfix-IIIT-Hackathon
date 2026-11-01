@@ -21,11 +21,42 @@ def initialize():
     with connection() as db:
         db.executescript('''
           CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, state TEXT NOT NULL);
+          CREATE TABLE IF NOT EXISTS submissions (
+            request_id TEXT PRIMARY KEY, incident_id TEXT NOT NULL UNIQUE);
+          CREATE TABLE IF NOT EXISTS action_claims (
+            incident_id TEXT NOT NULL, action TEXT NOT NULL,
+            PRIMARY KEY (incident_id, action));
           CREATE TABLE IF NOT EXISTS run_events (
             seq INTEGER PRIMARY KEY AUTOINCREMENT, incident_id TEXT NOT NULL,
             event TEXT NOT NULL, data TEXT NOT NULL);
           CREATE INDEX IF NOT EXISTS events_by_incident ON run_events(incident_id, seq);
         ''')
+
+
+def create_run(request_id, incident_id, changes):
+    """Atomically deduplicate a submission and create its first durable event."""
+    with connection() as db:
+        db.execute('BEGIN IMMEDIATE')
+        existing = db.execute('SELECT incident_id FROM submissions WHERE request_id=?',
+                              (request_id,)).fetchone()
+        if existing:
+            return existing['incident_id'], False
+        state = {'id': incident_id, **changes, 'revision': 1,
+                 'updated_at': datetime.now(timezone.utc).isoformat()}
+        data = json.dumps(state)
+        db.execute('INSERT INTO submissions VALUES (?,?)', (request_id, incident_id))
+        db.execute('INSERT INTO runs VALUES (?,?)', (incident_id, data))
+        db.execute('INSERT INTO run_events(incident_id,event,data) VALUES (?,?,?)',
+                   (incident_id, 'incident_started', data))
+    return incident_id, True
+
+
+def claim_action(incident_id, action):
+    """Return true exactly once for an incident/action pair."""
+    with connection() as db:
+        cursor = db.execute('INSERT OR IGNORE INTO action_claims VALUES (?,?)',
+                            (incident_id, action))
+    return cursor.rowcount == 1
 
 
 def get_state(incident_id):

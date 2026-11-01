@@ -37,7 +37,6 @@ class Settings:
     DATABASE_PATH: Path = BASE_DIR / os.getenv("DATABASE_PATH", "data/blinkfix.db")
 
     # Deployment Context File
-    CONTEXT_PATH: Path = BASE_DIR / "data" / "context.json"
 
     # Demo Mode
     DEMO_MODE: bool = os.getenv("DEMO_MODE", "true").lower() in ("true", "1", "yes")

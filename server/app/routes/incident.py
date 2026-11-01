@@ -3,7 +3,7 @@ from typing import Literal
 import uuid
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
-from ..state import get_state, list_states, record
+from ..state import create_run, get_state, list_states
 from ..services.orchestrator import run_incident_orchestration
 from ..services.patch_validator import FIXTURE
 
@@ -11,6 +11,7 @@ router = APIRouter(prefix='/api/incidents', tags=['incidents'])
 
 
 class RunRequest(BaseModel):
+    requestId: str = Field(default_factory=lambda: uuid.uuid4().hex, min_length=8, max_length=100)
     scenarioId: Literal['payments-typeerror', 'stripe-timeout'] = 'payments-typeerror'
     mode: Literal['live', 'fixture'] = 'live'
     publish: bool = False
@@ -23,14 +24,15 @@ async def simulate_outage(request: RunRequest, background_tasks: BackgroundTasks
         raise HTTPException(400, 'Fixture runs cannot publish PRs')
     incident_id = 'inc_' + uuid.uuid4().hex[:12]
     source = request.source if request.source is not None else (FIXTURE / 'payments.cjs').read_text()
-    record(incident_id, 'incident_started', {
+    incident_id, created = create_run(request.requestId, incident_id, {
         'status': 'TRIGGERED', 'scenario_id': request.scenarioId, 'mode': request.mode,
         'publish': request.publish, 'source': source, 'agents': [], 'patches': [],
         'started_at': datetime.now(timezone.utc).isoformat(), 'duration_ms': 0,
         'pr_url': None, 'error': None, 'mitigation': None,
     })
-    background_tasks.add_task(run_incident_orchestration, incident_id)
-    return {'status': 'initiated', 'incident_id': incident_id}
+    if created:
+        background_tasks.add_task(run_incident_orchestration, incident_id)
+    return {'status': 'initiated' if created else 'existing', 'incident_id': incident_id}
 
 
 @router.get('/{incident_id}')

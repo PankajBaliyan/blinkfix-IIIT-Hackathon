@@ -10,7 +10,7 @@ import httpx
 from fastapi.testclient import TestClient
 from app.main import app
 from app.config import settings
-from app.state import replay, get_state, recover_interrupted, record
+from app.state import claim_action, replay, get_state, recover_interrupted, record
 from app.services import orchestrator
 from app.services.patch_validator import FIXTURE, validate_candidate, rank_and_select_winner
 from app.services.github_service import create_draft_pull_request
@@ -49,6 +49,20 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual([p['validation']['passed'] for p in result['patches']], [False, True])
         self.assertIsNone(result['pr_url'])
         publish.assert_not_called()
+
+    def test_duplicate_request_returns_same_run_without_second_execution(self):
+        payload = {'requestId': 'same-request-123', 'mode': 'fixture'}
+        first = self.client.post('/api/incidents/simulate', json=payload).json()
+        second = self.client.post('/api/incidents/simulate', json=payload).json()
+        self.assertEqual(first['incident_id'], second['incident_id'])
+        self.assertEqual(second['status'], 'existing')
+        events = replay(first['incident_id'])
+        self.assertEqual(sum(event['event'] == 'incident_started' for event in events), 1)
+        self.assertEqual(sum(event['event'] == 'incident_completed' for event in events), 1)
+
+    def test_publication_claim_is_one_shot(self):
+        self.assertTrue(claim_action('claim-test', 'github-publication'))
+        self.assertFalse(claim_action('claim-test', 'github-publication'))
 
     def test_setup_status_exposes_readiness_without_secrets(self):
         with patch.object(settings, 'CEREBRAS_API_KEY', 'cerebras-secret'), \
@@ -218,6 +232,12 @@ class ProviderTests(unittest.TestCase):
             return httpx.Response(401, json={'error':'unauthorized'})
         with patch.object(settings, 'CEREBRAS_API_KEY', 'test'), self.client_patch(handler):
             with self.assertRaisesRegex(RuntimeError, '401'):
+                asyncio.run(cerebras_client.complete_json('JSON please', 'source'))
+
+    def test_cerebras_malformed_response_is_rejected(self):
+        response = httpx.Response(200, json={'choices':[{'message':{'content':'{"findings":{}}'}}]})
+        with patch.object(settings, 'CEREBRAS_API_KEY', 'test'), self.client_patch(lambda request: response):
+            with self.assertRaisesRegex(RuntimeError, 'malformed'):
                 asyncio.run(cerebras_client.complete_json('JSON please', 'source'))
 
     def test_codex_response_parsing_and_supplied_source(self):
