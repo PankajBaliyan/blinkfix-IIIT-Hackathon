@@ -63,7 +63,5 @@ class Settings:
     # SQLite Database File
     DATABASE_PATH: Path = BASE_DIR / os.getenv("DATABASE_PATH", "data/blinkfix.db")
 
-    # Demo Mode
-    DEMO_MODE: bool = os.getenv("DEMO_MODE", "true").lower() in ("true", "1", "yes")
 
 settings = Settings()

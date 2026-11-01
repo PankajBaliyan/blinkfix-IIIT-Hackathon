@@ -15,7 +15,8 @@ class ImpactAnalyst(BaseAgent):
     role = "Judges how serious the crash is and what it affects"
     task = (
         "Judge the impact of this crash on users, from the failing request and the error. "
-        "Do not invent traffic numbers.\n"
+        "The <traffic> line, when present, gives real request counts: use it. "
+        "Do not invent any other numbers.\n"
         'Return JSON: {"scope": string, "severity": "P0" or "P1" or "P2", '
         '"regression_risk": "LOW" or "MEDIUM" or "HIGH", "summary": string}\n'
         "scope: the part of the product that breaks, in a few words. "
@@ -25,7 +26,7 @@ class ImpactAnalyst(BaseAgent):
     async def run_agent_logic(
         self, payload: CrashPayload, context: Dict[str, Any], logs: List[str], evidence: Evidence
     ) -> Dict[str, Any]:
-        profile = impact_profile(payload)
+        profile = impact_profile(payload, context.get("traffic"))
         answer = await self.ask(evidence, logs)
 
         severity = SEVERITIES.get(str(answer.get("severity", "")).strip()[:2].upper()) if answer else None
@@ -40,25 +41,26 @@ class ImpactAnalyst(BaseAgent):
                 "summary": summary,
                 "findings": {
                     "scope": scope,
-                    # Traffic share is an estimate from a fixed table until real metrics are connected.
-                    "impact_percentage": profile["impact_percentage"],
+                    "recent_failures": profile["recent_failures"],
+                    "traffic": profile["traffic"],
                     "severity": severity,
                     "affected_routes": profile["affected_routes"],
                     "regression_risk": risk,
                 },
             }
 
-        # Built-in demo analysis
-        await asyncio.sleep(0.42)
-        self.note(logs, f"Blast radius scoped to {profile['scope']} ({profile['impact_percentage']}).")
-        self.note(logs, f"Assigned severity: {profile['severity']}.")
+        # Built-in analysis: only what can be measured, with a default severity
+        await asyncio.sleep(0.2)
+        self.note(logs, f"{profile['recent_failures']}.")
+        self.note(logs, f"Default severity {profile['severity']} (no model answer to judge it).")
         return {
-            "summary": f"Blast radius: {profile['scope']} ({profile['impact_percentage']}). Severity: {profile['severity']}.",
+            "summary": f"{profile['recent_failures']}. Severity: {profile['severity']}.",
             "findings": {
                 "scope": profile["scope"],
-                "impact_percentage": profile["impact_percentage"],
+                "recent_failures": profile["recent_failures"],
+                "traffic": profile["traffic"],
                 "severity": profile["severity"],
                 "affected_routes": profile["affected_routes"],
-                "regression_risk": "HIGH",
+                "regression_risk": "MEDIUM",
             },
         }

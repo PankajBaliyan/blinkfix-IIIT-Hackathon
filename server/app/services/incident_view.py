@@ -58,7 +58,7 @@ def build_incident_detail(incident_id: str) -> Optional[Dict[str, Any]]:
     detail = incident_summary(row)
     detail.update({
         "environment": payload.get("environment"),
-        "demoMode": settings.DEMO_MODE,
+        "slackLive": bool(settings.SLACK_WEBHOOK_URL),
         "culpritCommit": row.get("culprit_commit"),
         "winningPatchId": row.get("winning_patch_id"),
         "error": {

@@ -85,11 +85,9 @@ E. BACKEND QUALITY
 [ ] E3. Add automated tests for the backend
         Crash detector, webhook, orchestrator, validator, API shapes.
 [ ] E4. Add authentication or a shared secret on the webhook and approve routes
-[ ] E5. Add a way to clear or archive old incidents (and a clean database
-        for demos)
-[ ] E6. Remove leftover code that no longer fits
-        The /simulate route and the old JavaScript patches in the validator.
-[ ] E7. Update the README to match the real flow, API shapes and demo commands
+[x] E5. Add a way to clear or archive old incidents  (DONE: server/scripts/clear_incidents.py, makes a backup first)
+[x] E6. Remove leftover code that no longer fits  (DONE: /simulate route, mock defaults, DEMO_MODE, dead component. The old JavaScript syntax check in the validator remains as a fallback)
+[x] E7. Update the README to match the real flow, API shapes and demo commands  (DONE)
 
 
 F. FRONTEND
@@ -144,7 +142,7 @@ NEW ITEMS FROM THE CEREBRAS WORK
 [ ] A8. Parallel agents mode needs a higher rate limit
         CEREBRAS_AGENT_MODE=parallel (one call per agent) works but needs 6 calls per
         incident, so it only makes sense with a key that allows more than 5 per minute.
-[ ] E8. Update README: the model is gpt-oss-120b now (llama3.3-70b is not available
+[x] E8. Update README: the model is gpt-oss-120b now (llama3.3-70b is not available
         to our key), plus the rate-limit behaviour.
 
 
@@ -176,7 +174,7 @@ NEW ITEMS FROM THE GITHUB / CODEX WORK
 [ ] C7. Make the Codex fix able to change more than one file
 [ ] D6. Allow a different repository and service path per incident
         Today one repository and one path prefix are configured for everything.
-[ ] E9. Delete leftover test incidents from the database
+[ ] E9. Delete leftover test incidents from the database  (run: cd server && python scripts/clear_incidents.py --keep inc_9ad7bd12)
 
 NEW ITEMS FROM THE VALIDATION WORK
 ----------------------------------
@@ -204,6 +202,15 @@ AUTOMATIC PULL REQUESTS (done)
     - If nothing opens, the reason is saved and shown (no GitHub login, unverified fix, ...).
 [ ] C8. Group repeated crashes into one incident (same as D2). Each curl still makes a new
         incident, and different-but-valid fixes each get their own PR.
+
+HONESTY CLEAN-UP (done)
+-----------------------
+[x] "Users affected" now comes from real request counts in the service's logs.
+[x] The fake outside-services table is gone; the card shows the Infra Checker's real reasoning
+    and the real dependency list.
+[x] "Approve action" no longer claims to run a rollback; it says it only records the approval.
+[ ] Real health checks for outside services (see A6: make the Stripe demo bug call a real host,
+    then probe that host).
 
 SUGGESTED ORDER
 ---------------

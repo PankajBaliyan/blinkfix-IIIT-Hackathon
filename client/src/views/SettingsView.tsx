@@ -197,9 +197,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </Row>
               <Row
                 title="Slack"
-                hint={health.demo_mode ? 'Messages are simulated. Nothing is sent to Slack.' : 'Messages are sent to your incidents channel.'}
+                hint={health.slack.configured ? 'A message is sent to your channel when a pull request is opened.' : <>Not set up, so nothing is sent to Slack. Add <Mono>SLACK_WEBHOOK_URL</Mono> to <Mono>server/.env</Mono> and restart the server.</>}
               >
-                <Badge tone={health.demo_mode ? 'warn' : 'ok'}>{health.demo_mode ? 'Simulated' : 'Live'}</Badge>
+                <Badge tone={health.slack.configured ? 'ok' : 'neutral'}>{health.slack.configured ? 'Connected' : 'Not set up'}</Badge>
               </Row>
             </>
           )}

@@ -177,7 +177,9 @@ export const IncidentView: React.FC<IncidentViewProps> = ({
               {detail.impact && (
                 <>
                   <Fact label="Area affected">{detail.impact.scope}</Fact>
-                  <Fact label="Users affected">{detail.impact.impact_percentage}</Fact>
+                  <div className="col-span-2">
+                    <Fact label="Recent failures" wrap>{detail.impact.recent_failures}</Fact>
+                  </div>
                 </>
               )}
             </dl>
@@ -286,7 +288,7 @@ export const IncidentView: React.FC<IncidentViewProps> = ({
               <div className="min-w-0">
                 <p className="text-sm font-semibold">Slack message</p>
                 <p className="mt-0.5 text-sm text-muted">
-                  {detail.pr ? 'Sent when the pull request was opened (simulated).' : 'Sent once a pull request is opened.'}
+                  {detail.pr ? (detail.slackLive ? 'Sent when the pull request was opened.' : 'Not sent: no Slack webhook is set.') : 'Sent once a pull request is opened.'}
                 </p>
               </div>
             </div>

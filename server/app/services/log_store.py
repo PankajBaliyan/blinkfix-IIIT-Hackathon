@@ -17,6 +17,21 @@ class LogStore:
     def add(self, record: Dict[str, Any]) -> None:
         self._records.append(record)
 
+    def request_stats(self, service: str, method: str, path: str, window_s: int = 300) -> Dict[str, Any]:
+        """How many requests to one route arrived recently, and how many of them ended in an unhandled error."""
+        cutoff = time.time() - window_s
+        received = f"{method} {path} received"
+        failed_marker = f"on {method} {path}:"
+        total = failed = 0
+        for r in self._records:
+            if r["service"] != service or r["ts"] < cutoff:
+                continue
+            if r["message"] == received:
+                total += 1
+            elif r["level"] == "ERROR" and r["message"].startswith("Unhandled") and failed_marker in r["message"]:
+                failed += 1
+        return {"total": total, "failed": failed, "window_minutes": window_s // 60}
+
     def fetch(self, service: str, limit: int = 25) -> List[Dict[str, Any]]:
         """Most recent log lines for a service, oldest first."""
         rows = [r for r in self._records if r["service"] == service]

@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from ..models.schemas import CrashPayload
 
 
@@ -28,24 +28,21 @@ def find_culprit_commit(context: Dict[str, Any], file: str = "") -> Dict[str, An
     }
 
 
-# How much of the product each route carries. Stand-in for real traffic metrics.
-_IMPACT_BY_ROUTE = {
-    "/api/demo/checkout": ("Checkout", "14.2% of live traffic", "P0 - CRITICAL"),
-    "/api/demo/payments/charge": ("Card payments", "100% of charge attempts", "P1 - HIGH"),
-    "/api/demo/orders": ("Order summaries", "3.1% of live traffic", "P2 - MEDIUM"),
-}
+def describe_traffic(traffic: Optional[Dict[str, Any]], method: str, route: str) -> str:
+    """One plain sentence from the real request counts."""
+    if not traffic or not traffic.get("total"):
+        return "No request data for this route in the recent window"
+    return f"{traffic['failed']} of {traffic['total']} recent requests to {method} {route} failed (last {traffic['window_minutes']} minutes)"
 
 
-def impact_profile(payload: CrashPayload) -> Dict[str, Any]:
+def impact_profile(payload: CrashPayload, traffic: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Facts about the crash's reach. Only what can be measured: the route and the real request counts."""
+    method = payload.method or "GET"
     route = payload.route or ""
-    scope, traffic, severity = ("The failing endpoint", "Unknown share of traffic", "P1 - HIGH")
-    for prefix, profile in _IMPACT_BY_ROUTE.items():
-        if route.startswith(prefix):
-            scope, traffic, severity = profile
-            break
     return {
-        "scope": scope,
-        "impact_percentage": traffic,
-        "severity": severity,
-        "affected_routes": [f"{payload.method or 'GET'} {route}"] if route else [],
+        "scope": f"{method} {route}".strip() or "The failing endpoint",
+        "recent_failures": describe_traffic(traffic, method, route),
+        "traffic": traffic,
+        "severity": "P1 - HIGH",
+        "affected_routes": [f"{method} {route}"] if route else [],
     }

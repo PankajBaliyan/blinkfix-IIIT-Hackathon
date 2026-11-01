@@ -4,13 +4,13 @@ from typing import Optional, List, Dict, Any
 class CrashPayload(BaseModel):
     eventId: Optional[str] = None
     level: str = "error"
-    service: str = "checkout-service"
-    environment: str = "prod-us-east-1"
-    message: str = "TypeError: Cannot read properties of undefined (reading 'exchangeRate')"
-    exceptionType: str = "TypeError"
-    file: str = "src/payments.js"
-    line: int = 5
-    functionName: Optional[str] = "processPayment"
+    service: str = "unknown-service"
+    environment: str = "unknown"
+    message: str = "Unknown error"
+    exceptionType: str = "Error"
+    file: str = "unknown"
+    line: int = 0
+    functionName: Optional[str] = None
     timestamp: Optional[str] = None
     stackTrace: Optional[str] = None
     requestId: Optional[str] = None
@@ -19,10 +19,6 @@ class CrashPayload(BaseModel):
     # What the failing request sent, so it can be replayed against a fix. Secrets are masked.
     requestBody: Optional[str] = None
     queryString: Optional[str] = None
-
-class SimulateRequest(BaseModel):
-    scenarioId: str = "payments-typeerror"
-    customCrash: Optional[CrashPayload] = None
 
 class AgentResult(BaseModel):
     agent_name: str

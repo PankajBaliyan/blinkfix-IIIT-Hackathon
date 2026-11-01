@@ -52,14 +52,15 @@ export const CardHeader: React.FC<{ title: string; hint?: string; right?: React.
 );
 
 /** Label above a value. Used for small facts like "Service" or "Environment". */
-export const Fact: React.FC<{ label: string; children: React.ReactNode; mono?: boolean }> = ({
+export const Fact: React.FC<{ label: string; children: React.ReactNode; mono?: boolean; wrap?: boolean }> = ({
   label,
   children,
   mono,
+  wrap,
 }) => (
   <div className="min-w-0">
     <dt className="text-xs text-muted">{label}</dt>
-    <dd className={`mt-0.5 truncate text-sm ${mono ? 'font-mono' : 'font-medium'}`}>{children}</dd>
+    <dd className={`mt-0.5 text-sm ${wrap ? '' : 'truncate'} ${mono ? 'font-mono' : 'font-medium'}`}>{children}</dd>
   </div>
 );
 

@@ -300,7 +300,7 @@ export const FixView: React.FC<FixViewProps> = ({ detail, github, onOpenSettings
                         : 'Sent when a pull request is opened.'}
                     </p>
                   </div>
-                  {detail.demoMode && <Badge tone="neutral">Simulated</Badge>}
+                  {!detail.slackLive && <Badge tone="neutral">Not sent</Badge>}
                 </div>
               </div>
             </section>
