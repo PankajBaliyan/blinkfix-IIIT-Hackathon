@@ -1,0 +1,64 @@
+{
+  "repository": "swarm-zero-demo",
+  "branch": "main",
+  "deployment": {
+    "version": "1.0.4",
+    "lastDeployment": "2026-10-31T10:00:00Z",
+    "deployedBy": "ci-runner-42",
+    "cluster": "us-east-1-k8s-prod"
+  },
+  "recentCommits": [
+    {
+      "hash": "abc104",
+      "author": "alex@company.com",
+      "timestamp": "2026-10-31T09:45:00Z",
+      "message": "Refactor payment processing currency conversion",
+      "changedFiles": ["src/payments.js"],
+      "prNumber": 104
+    },
+    {
+      "hash": "def456",
+      "author": "sam@company.com",
+      "timestamp": "2026-10-30T16:20:00Z",
+      "message": "Update Stripe SDK version to 12.4.0",
+      "changedFiles": ["package.json"],
+      "prNumber": 103
+    },
+    {
+      "hash": "ghi789",
+      "author": "jordan@company.com",
+      "timestamp": "2026-10-30T11:10:00Z",
+      "message": "Add telemetry middleware for checkout metrics",
+      "changedFiles": ["src/middleware/telemetry.js"],
+      "prNumber": 102
+    },
+    {
+      "hash": "jkl012",
+      "author": "pat@company.com",
+      "timestamp": "2026-10-29T18:05:00Z",
+      "message": "Migrate database pool connection retry limit",
+      "changedFiles": ["src/db/pool.js"],
+      "prNumber": 101
+    },
+    {
+      "hash": "mno345",
+      "author": "alex@company.com",
+      "timestamp": "2026-10-29T09:15:00Z",
+      "message": "Initial payment intent handler scaffolding",
+      "changedFiles": ["src/payments.js", "src/auth.js"],
+      "prNumber": 100
+    }
+  ],
+  "dependencies": {
+    "express": "4.18.2",
+    "stripe": "12.4.0",
+    "axios": "1.6.0",
+    "pg": "8.11.3",
+    "ioredis": "5.3.2"
+  },
+  "files": {
+    "src/payments.js": "const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);\n\nasync function processPayment(cart, customer) {\n  // Bug: user currency metadata is undefined when cart.currency is omitted\n  const amountInCents = cart.total * cart.currency.exchangeRate;\n  \n  return await stripe.charges.create({\n    amount: Math.round(amountInCents),\n    currency: cart.currency.code || 'usd',\n    customer: customer.id,\n  });\n}\n\nmodule.exports = { processPayment };",
+    "src/auth.js": "function verifyToken(req, res, next) {\n  const token = req.headers.authorization;\n  if (!token) return res.status(401).json({ error: 'Unauthorized' });\n  next();\n}\n\nmodule.exports = { verifyToken };"
+  }
+}
+
