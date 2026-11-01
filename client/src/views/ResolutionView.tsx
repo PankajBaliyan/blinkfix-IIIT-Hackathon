@@ -1,0 +1,213 @@
+import React, { useState } from 'react';
+import {
+  Scenario,
+  IncidentStatus,
+} from '../types';
+import {
+  GitPullRequest,
+  ExternalLink,
+  Copy,
+  Check,
+  MessageSquare,
+  CheckCircle2,
+  Clock,
+  Zap,
+  GitBranch,
+  ShieldCheck,
+  AlertTriangle,
+  RotateCcw,
+  Sliders,
+  ChevronRight,
+} from 'lucide-react';
+import { ResolutionHub } from '../components/ResolutionHub';
+
+interface ResolutionViewProps {
+  scenario: Scenario;
+  status: IncidentStatus;
+  elapsedMs: number;
+}
+
+export const ResolutionView: React.FC<ResolutionViewProps> = ({
+  scenario,
+  status,
+  elapsedMs,
+}) => {
+  const [prCopied, setPrCopied] = useState(false);
+  const [isMerged, setIsMerged] = useState(false);
+  const [canaryTraffic, setCanaryTraffic] = useState(10);
+
+  const prNumber = 105;
+  const prUrl = `https://github.com/swarm-zero-demo/${scenario.service}/pull/${prNumber}`;
+  const branchName = `swarm-zero/fix/incident-001`;
+  const mttrSeconds = (elapsedMs / 1000).toFixed(2);
+
+  const handleCopyPr = () => {
+    navigator.clipboard.writeText(prUrl);
+    setPrCopied(true);
+    setTimeout(() => setPrCopied(false), 2000);
+  };
+
+  return (
+    <div className="space-y-6 animate-fadeIn">
+      {/* Header Banner */}
+      <div className="p-5 rounded-xl border border-terminal-green/40 bg-gradient-to-r from-obsidian-900 via-obsidian-850 to-terminal-green/10 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-lg bg-terminal-green/20 text-terminal-green border border-terminal-green/40">
+            <GitPullRequest className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-terminal-green/20 text-terminal-green border border-terminal-green/40">
+                VERIFIED PR DELIVERED
+              </span>
+              <span className="text-xs font-mono text-slate-400">
+                MTTR: <span className="text-terminal-green font-bold">{mttrSeconds}s</span>
+              </span>
+            </div>
+            <h2 className="font-mono text-base sm:text-lg font-bold text-white mt-1">
+              Automated Remediation & Pull Request Lifecycle
+            </h2>
+          </div>
+        </div>
+
+        {/* PR CTA */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handleCopyPr}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-obsidian-800 hover:bg-obsidian-750 text-slate-300 font-mono text-xs transition border border-obsidian-700"
+          >
+            {prCopied ? <Check className="w-3.5 h-3.5 text-terminal-green" /> : <Copy className="w-3.5 h-3.5" />}
+            <span>{prCopied ? 'URL Copied' : 'Copy PR URL'}</span>
+          </button>
+
+          <a
+            href={prUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-terminal-green hover:bg-emerald-400 text-obsidian-950 font-mono text-xs font-bold transition shadow-lg shadow-terminal-green/20"
+          >
+            <span>View PR on GitHub</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
+      </div>
+
+      {/* Main Resolution Hub Card (GitHub PR details + Slack Block Kit) */}
+      <ResolutionHub scenario={scenario} elapsedMs={elapsedMs} />
+
+      {/* Simulated GitHub PR Interactive Preview & Canary Rollout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* GitHub Pull Request Review Card (7 cols) */}
+        <div className="lg:col-span-7 rounded-xl border border-obsidian-750 bg-obsidian-900/90 p-5 space-y-4 shadow-xl">
+          <div className="flex items-center justify-between border-b border-obsidian-800 pb-3">
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-terminal-green inline-block" />
+              <h3 className="font-mono text-sm font-bold text-white">
+                Pull Request Simulation // {scenario.service} #{prNumber}
+              </h3>
+            </div>
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-terminal-blue/15 text-terminal-blue border border-terminal-blue/30">
+              Open (Draft)
+            </span>
+          </div>
+
+          <div className="space-y-3 font-mono text-xs">
+            <div className="p-3.5 rounded-lg bg-obsidian-950 border border-obsidian-800 space-y-2">
+              <div className="text-slate-200 font-bold text-sm">
+                fix({scenario.service}): resolve {scenario.errorName} in {scenario.file}
+              </div>
+              <p className="text-slate-400 text-xs leading-relaxed">
+                Autonomous patch generated by **Blinkfix // Swarm Zero** following incident detection in <code>{scenario.environment}</code>.
+              </p>
+              <ul className="text-slate-300 text-xs list-disc list-inside space-y-1 pt-1">
+                <li>Root Cause: Null/undefined dereference in <code>{scenario.functionName}()</code></li>
+                <li>Culprit Commit: <code>{scenario.culpritCommit.hash}</code> by {scenario.culpritCommit.author}</li>
+                <li>Validation: All AST syntax gates and unit tests verified passing.</li>
+                <li>Resolution MTTR: <strong>{mttrSeconds}s</strong></li>
+              </ul>
+            </div>
+
+            {/* Merge Simulation Action */}
+            <div className="flex items-center justify-between p-3 rounded-lg bg-obsidian-850 border border-obsidian-750">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-terminal-green" />
+                <span className="text-slate-300 font-semibold text-xs">
+                  {isMerged ? 'Pull request merged into main branch.' : 'All checks have passed (3 automated workflows).'}
+                </span>
+              </div>
+
+              <button
+                onClick={() => setIsMerged(!isMerged)}
+                className={`px-3 py-1.5 rounded-lg font-mono text-xs font-bold transition ${
+                  isMerged
+                    ? 'bg-purple-900/60 text-purple-300 border border-purple-500/50'
+                    : 'bg-terminal-green hover:bg-emerald-400 text-obsidian-950'
+                }`}
+              >
+                {isMerged ? 'Merged 🟣' : 'Merge Pull Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Canary Promotion & Traffic Shifting Controller (5 cols) */}
+        <div className="lg:col-span-5 rounded-xl border border-obsidian-750 bg-obsidian-900/90 p-5 space-y-4 shadow-xl">
+          <div className="flex items-center justify-between border-b border-obsidian-800 pb-3">
+            <div className="flex items-center gap-2">
+              <Sliders className="w-4 h-4 text-terminal-cyan" />
+              <h3 className="font-mono text-sm font-bold text-white">
+                Canary Deployment Controller
+              </h3>
+            </div>
+            <span className="text-[10px] font-mono text-terminal-green font-bold">
+              K8S INGRESS
+            </span>
+          </div>
+
+          <div className="space-y-4 font-mono text-xs">
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-slate-400">Canary Traffic Weight:</span>
+                <span className="text-terminal-cyan font-bold">{canaryTraffic}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value={canaryTraffic}
+                onChange={(e) => setCanaryTraffic(Number(e.target.value))}
+                className="w-full accent-terminal-cyan cursor-pointer"
+              />
+              <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+                <span>0% (Isolation)</span>
+                <span>50% (Split)</span>
+                <span>100% (Full Rollout)</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg bg-obsidian-950 border border-obsidian-800 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Active Version:</span>
+                <span className="text-slate-200 font-bold">{scenario.version}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Canary Version:</span>
+                <span className="text-terminal-green font-bold">v1.0.5-patch</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Error Rate (Canary):</span>
+                <span className="text-terminal-green font-bold">0.00%</span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Automated health monitors compare p99 latency and 5xx error rates between current deployment and the patched canary pod.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+

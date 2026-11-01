@@ -9,12 +9,13 @@ export default {
     extend: {
       colors: {
         obsidian: {
-          950: '#05070b',
-          900: '#07090e',
-          850: '#0a0e17',
-          800: '#0d121f',
-          700: '#151c2e',
-          600: '#1f293d',
+          950: 'rgb(var(--color-obsidian-950) / <alpha-value>)',
+          900: 'rgb(var(--color-obsidian-900) / <alpha-value>)',
+          850: 'rgb(var(--color-obsidian-850) / <alpha-value>)',
+          800: 'rgb(var(--color-obsidian-800) / <alpha-value>)',
+          750: 'rgb(var(--color-obsidian-750) / <alpha-value>)',
+          700: 'rgb(var(--color-obsidian-700) / <alpha-value>)',
+          600: 'rgb(var(--color-obsidian-600) / <alpha-value>)',
         },
         terminal: {
           green: '#10b981',
@@ -50,4 +51,3 @@ export default {
   },
   plugins: [],
 }
-

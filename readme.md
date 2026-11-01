@@ -112,11 +112,18 @@ Each patch is evaluated by the **Patch Validator**:
 - Opens a **GitHub Draft Pull Request** linked directly in the UI.
 - Broadcasts rich **Slack Block Kit** notifications containing root cause, culprit commit, MTTR, and PR links.
 
-### 6. 🎧 Immersive SRE Mission Control UI
-- Cyberpunk / terminal dark aesthetic (`#07090e`).
-- Real-time terminal drawers with simulated typing telemetry.
-- Side-by-side unified code diff viewer with syntax highlights.
-- Synthesized Web Audio API soundscape (alert sirens, terminal keys, recovery chime) and celebration confetti upon resolution.
+### 6. 🎧 Modern Multi-Page SRE Mission Control UI
+- **Collapsible & Responsive Sidebar**: Navigate between dedicated operational centers with live status orbs, badge counts, and mobile drawer support.
+- **Dedicated Operational Views**:
+  - 🛰️ **Live Incident Cockpit**: Hero incident banner, T-Zero MTTR stopwatch, 1-click rollback gate, and 5-agent parallel terminal grid.
+  - 🤖 **Agent Swarm Inspector**: Deep-dive into each autonomous AI worker, Cerebras sub-500ms latency metrics, logs, and structured JSON outputs.
+  - 🧬 **Speculative Patch Lab**: Interactive evaluation of 5 candidate repair strategies, 4-gate AST verification matrix, and unified code diff viewer.
+  - 🐙 **PR & Slack Deployment Hub**: Real-time GitHub Draft PR simulator, Slack Block Kit alert visualizer, and canary traffic slider.
+  - 🌐 **Service Topology**: Microservices architecture map, upstream dependency status (Stripe, Redis, DB), and blast radius routing.
+  - 📜 **Incident History & MTTR Analytics**: Searchable audit log of resolved incidents and MTTR benchmark metrics.
+  - ⚙️ **Engine Settings**: Cerebras CS-3 inference configuration, model selection (`llama3.3-70b`), and GitHub/Slack webhook controls.
+- **Visual Design & Dark/Light Mode Converter**: Seamless instant toggle between High-Tech Cyberpunk Obsidian Dark Theme and Crisp Enterprise Daylight Light Theme with localStorage persistence.
+- **Soundscape & Confetti**: Synthesized Web Audio API cues (alarm, clicks, success chime) and victory confetti upon remediation.
 
 ---
 
@@ -127,21 +134,31 @@ blinkfix-IIIT-Hackathon/
 ├── client/                          # Frontend Application (React + Vite + TypeScript)
 │   ├── src/
 │   │   ├── components/
+│   │   │   ├── Sidebar.tsx          # Collapsible & responsive navigation sidebar
+│   │   │   ├── Navbar.tsx           # Command header with global mini-timer & scenario controls
 │   │   │   ├── AgentSwarmGrid.tsx   # 5-terminal parallel agent monitoring grid
 │   │   │   ├── AgentTerminal.tsx    # Individual streaming terminal window
 │   │   │   ├── CodeDiffViewer.tsx   # Side-by-side before/after code diff viewer
 │   │   │   ├── Confetti.tsx         # Victory celebration trigger
-│   │   │   ├── Header.tsx           # Mission control command header
 │   │   │   ├── IncidentCockpit.tsx  # P0 Alert details & T-Zero stopwatch
 │   │   │   ├── MitigationBanner.tsx # Human rollback approval panel
 │   │   │   ├── PatchComparison.tsx  # 5 candidate patches review tabs
 │   │   │   └── ResolutionHub.tsx    # GitHub PR status & Slack notification card
+│   │   ├── views/
+│   │   │   ├── CockpitView.tsx      # Live Incident Cockpit view
+│   │   │   ├── AgentsView.tsx       # Agent Swarm deep-dive & telemetry
+│   │   │   ├── PatchesView.tsx      # Speculative Patch Lab & AST validation
+│   │   │   ├── ResolutionView.tsx   # GitHub Draft PR & Slack Deployment Hub
+│   │   │   ├── TopologyView.tsx     # Microservices & dependency health map
+│   │   │   ├── HistoryView.tsx      # Incident audit log & MTTR analytics
+│   │   │   └── SettingsView.tsx     # Engine, Cerebras & integration config
 │   │   ├── data/
 │   │   │   └── mockScenarios.ts     # Pre-configured incident scenarios
 │   │   ├── hooks/
 │   │   │   ├── useAudioFX.ts        # Synthesized Web Audio sound effects
 │   │   │   ├── useSimulation.ts     # Incident lifecycle orchestration hook
-│   │   │   └── useStopwatch.ts      # 60 FPS high-resolution millisecond timer
+│   │   │   ├── useStopwatch.ts      # 60 FPS high-resolution millisecond timer
+│   │   │   └── useTheme.ts          # Dark/Light mode theme state & persistence
 │   │   ├── services/
 │   │   │   └── incident.api.ts      # Backend API & SSE event stream client
 │   │   ├── types/                   # TypeScript interfaces & domain types
