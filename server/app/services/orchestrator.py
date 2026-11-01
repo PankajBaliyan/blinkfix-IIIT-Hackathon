@@ -1,219 +1,106 @@
 import asyncio
 import time
-import logging
-from typing import Dict, Any, List
-from ..models.schemas import CrashPayload, CandidatePatch, PatchValidation
-from ..agents.trace_analyst import TraceAnalyst
-from ..agents.git_detective import GitDetective
-from ..agents.infra_checker import InfraChecker
-from ..agents.impact_analyst import ImpactAnalyst
-from ..agents.mitigation_planner import MitigationPlanner
-from ..services.context_service import load_deployment_context
-from ..services.patch_validator import rank_and_select_winner
-from ..services.github_service import create_draft_pull_request
-from ..services.slack_service import send_slack_incident_alert
+import json
+from ..state import claim_action, get_state
 from ..streaming.event_bus import event_bus
-from ..database import save_incident, update_incident, save_agent_run
+from .patch_validator import FIXTURE, validate_candidate, rank_and_select_winner
+from .cerebras_service import cerebras_client
+from .codex_service import generate_candidates
+from .github_service import create_draft_pull_request
 
-logger = logging.getLogger("blinkfix.orchestrator")
+ROLES = ['Trace Analyst', 'Git Detective', 'Infra Checker', 'Impact Analyst', 'Mitigation Planner']
 
-async def run_incident_orchestration(incident_id: str, payload: CrashPayload):
-    """Executes the closed-loop autonomous incident investigation & speculative healing."""
-    start_time = time.perf_counter()
-    context = load_deployment_context()
 
-    # 1. Initial State in DB & SSE Broadcast
-    save_incident({
-        "id": incident_id,
-        "service": payload.service,
-        "error_name": payload.exceptionType,
-        "error_message": payload.message,
-        "file": payload.file,
-        "line": payload.line,
-        "status": "AGENTS_ACTIVE",
-        "context_snapshot": context,
-    })
+async def run_incident_orchestration(incident_id):
+    started = time.perf_counter()
+    state = get_state(incident_id)
 
-    await event_bus.broadcast(incident_id, "incident_started", {
-        "incident_id": incident_id,
-        "service": payload.service,
-        "error": payload.message,
-        "timestamp": time.time(),
-    })
+    def emit(event, **changes):
+        changes['duration_ms'] = int((time.perf_counter() - started) * 1000)
+        return event_bus.publish(incident_id, event, changes)
 
-    # 2. Parallel Burst of 5 Specialist Agents
-    agents = [
-        TraceAnalyst(),
-        GitDetective(),
-        InfraChecker(),
-        ImpactAnalyst(),
-        MitigationPlanner(),
-    ]
-
-    for agent in agents:
-        await event_bus.broadcast(incident_id, "agent_started", {"agent": agent.name})
-
-    # Execute all 5 concurrently
-    agent_tasks = [agent.execute(payload, context) for agent in agents]
-    agent_results = await asyncio.gather(*agent_tasks, return_exceptions=True)
-
-    culprit_commit = "abc104"
-    for res in agent_results:
-        if isinstance(res, Exception):
-            logger.error(f"Agent failed: {res}")
-            continue
-        save_agent_run(incident_id, res.model_dump())
-        await event_bus.broadcast(incident_id, "agent_completed", res.model_dump())
-        if res.agent_name == "Git Detective":
-            culprit_commit = res.findings.get("commit_hash", "abc104")
-
-    # Broadcast Mitigation Ready
-    await event_bus.broadcast(incident_id, "mitigation_ready", {
-        "action": "Rollback to Deployment v1.0.3 (Revert PR #104)",
-        "target_commit": culprit_commit,
-        "risk_level": "LOW",
-    })
-
-    # 3. Speculative Multi-Patching (5 candidate strategies)
-    await event_bus.broadcast(incident_id, "repair_started", {
-        "candidate_count": 5,
-        "target_file": payload.file,
-    })
-
-    await asyncio.sleep(0.35)
-
-    candidate_patches = [
-        CandidatePatch(
-            id="patch-a",
-            title="Patch A: Standard ES6 Optional Chaining (Winner)",
-            strategy="Modern ES6 + Nullish Coalescing",
-            explanation="Safely access cart?.currency?.exchangeRate ?? 1.0 with zero runtime overhead.",
-            confidence=0.98,
-            isWinner=True,
-            validation=PatchValidation(
-                targetFileMatch=True,
-                astSyntaxValid=True,
-                unitTestsPassed="3/3 passing",
-                diffLineChange="+3 / -2 lines",
-                score=96,
-            ),
-            code="const rate = cart?.currency?.exchangeRate ?? 1.0;\nconst currencyCode = cart?.currency?.code ?? 'usd';\nconst amountInCents = cart.total * rate;",
-        ),
-        CandidatePatch(
-            id="patch-b",
-            title="Patch B: Strict Runtime Type-Checking",
-            strategy="Strict Type-Check Guard",
-            explanation="Explicit typeof validation checking both object existence and numeric exchangeRate.",
-            confidence=0.89,
-            isWinner=False,
-            validation=PatchValidation(
-                targetFileMatch=True,
-                astSyntaxValid=True,
-                unitTestsPassed="3/3 passing",
-                diffLineChange="+6 / -1 lines",
-                score=87,
-            ),
-            code="const hasCurrency = cart && typeof cart.currency === 'object' && typeof cart.currency.exchangeRate === 'number';\nconst rate = hasCurrency ? cart.currency.exchangeRate : 1.0;\nconst amountInCents = cart.total * rate;",
-        ),
-        CandidatePatch(
-            id="patch-c",
-            title="Patch C: Defensive Fallback Guard",
-            strategy="Defensive Object Fallback",
-            explanation="Constructs a default fallback currency object before dereferencing keys.",
-            confidence=0.84,
-            isWinner=False,
-            validation=PatchValidation(
-                targetFileMatch=True,
-                astSyntaxValid=True,
-                unitTestsPassed="2/3 passing",
-                diffLineChange="+4 / -1 lines",
-                score=79,
-            ),
-            code="const currency = cart.currency || { exchangeRate: 1.0, code: 'usd' };\nconst amountInCents = cart.total * currency.exchangeRate;",
-        ),
-        CandidatePatch(
-            id="patch-d",
-            title="Patch D: Minimal Character Modification",
-            strategy="Minimal AST Edit",
-            explanation="Minimal inline ternary expression avoiding variable assignments.",
-            confidence=0.78,
-            isWinner=False,
-            validation=PatchValidation(
-                targetFileMatch=True,
-                astSyntaxValid=True,
-                unitTestsPassed="3/3 passing",
-                diffLineChange="+1 / -1 lines",
-                score=82,
-            ),
-            code="const amountInCents = cart.total * (cart.currency ? cart.currency.exchangeRate : 1.0);",
-        ),
-        CandidatePatch(
-            id="patch-e",
-            title="Patch E: Guard Clause Early Rejection",
-            strategy="Guard Clause Early Return",
-            explanation="Throws informative descriptive Error if currency metadata is missing.",
-            confidence=0.65,
-            isWinner=False,
-            validation=PatchValidation(
-                targetFileMatch=True,
-                astSyntaxValid=True,
-                unitTestsPassed="1/3 passing",
-                diffLineChange="+3 / -0 lines",
-                score=61,
-            ),
-            code="if (!cart || !cart.currency) throw new Error('Missing cart currency context');",
-        ),
-    ]
-
-    validated_patches = rank_and_select_winner(candidate_patches)
-    winning_patch = next((p for p in validated_patches if p.isWinner), validated_patches[0])
-
-    await event_bus.broadcast(incident_id, "patch_verified", {
-        "winning_patch_id": winning_patch.id,
-        "strategy": winning_patch.strategy,
-        "score": winning_patch.validation.score,
-        "code": winning_patch.code,
-    })
-
-    # 4. Create Draft Pull Request on GitHub
-    pr_result = await create_draft_pull_request(
-        incident_id=incident_id,
-        target_file=payload.file,
-        patch_code=winning_patch.code,
-        summary=f"Automated patch fix by Blinkfix for {payload.message}",
-        culprit_commit=culprit_commit,
-    )
-
-    elapsed_ms = int((time.perf_counter() - start_time) * 1000)
-
-    # 5. Dispatch Slack Notification
-    await send_slack_incident_alert(
-        incident_id=incident_id,
-        service=payload.service,
-        error_name=payload.exceptionType,
-        error_message=payload.message,
-        pr_url=pr_result["pr_url"],
-        duration_ms=elapsed_ms,
-        culprit_commit=culprit_commit,
-    )
-
-    # 6. Update SQLite Database
-    update_incident(incident_id, {
-        "status": "RESOLVED",
-        "duration_ms": elapsed_ms,
-        "culprit_commit": culprit_commit,
-        "winning_patch_id": winning_patch.id,
-        "pr_url": pr_result["pr_url"],
-    })
-
-    # 7. Final SSE Broadcast
-    await event_bus.broadcast(incident_id, "pr_created", pr_result)
-    await event_bus.broadcast(incident_id, "incident_completed", {
-        "incident_id": incident_id,
-        "duration_ms": elapsed_ms,
-        "status": "RESOLVED",
-        "pr_url": pr_result["pr_url"],
-    })
-
-    logger.info(f"Incident {incident_id} successfully resolved in {elapsed_ms}ms! PR: {pr_result['pr_url']}")
-
+    try:
+        # Infrastructure fixture is an explicit supplied telemetry scenario,
+        # not a claimed live probe of Stripe.
+        if state['scenario_id'] == 'stripe-timeout':
+            emit('mitigation_ready', status='MITIGATED',
+                 telemetry={'source': 'infrastructure fixture', 'upstream': 'payment-gateway',
+                            'http_status': 503, 'local_health': 'ok'},
+                 mitigation='Upstream payment gateway unavailable (fixture 503). Pause checkout, use bounded retries/circuit breaker and contact provider. No code patch generated.',
+                 patches=[], agents=[])
+            return
+        source = state['source']
+        contract = (FIXTURE / 'CONTRACT.md').read_text()
+        tests = (FIXTURE / 'payments.test.cjs').read_text()
+        baseline = await asyncio.to_thread(validate_candidate, source, 'original')
+        emit('baseline_completed', baseline=baseline)
+        if baseline['validation']['syntax']['exit_code'] != 0:
+            raise RuntimeError('Supplied source has a syntax error; this demo supports only the checkout currency bug')
+        if baseline['validation']['passed']:
+            raise RuntimeError('Regression does not reproduce against supplied source; no patch or PR generated')
+        error = baseline['validation']['tests']['stdout'] + baseline['validation']['tests']['stderr']
+        emit('agent_started', status='AGENTS_ACTIVE', agents=[
+            {'agent_name': role, 'status': 'ANALYZING', 'summary': 'Analyzing supplied evidence...',
+             'duration_ms': 0, 'logs': [], 'findings': {}} for role in ROLES])
+        if state['mode'] == 'fixture':
+            analyses = [
+                {'agent_name': role, 'summary': 'Offline fixture mode: model call skipped.',
+                 'status': 'SKIPPED', 'duration_ms': 0, 'logs': [], 'findings': {}}
+                for role in ROLES
+            ]
+            emit('agent_completed', agents=analyses)
+        else:
+            async def analyze(role):
+                tick = time.perf_counter()
+                try:
+                    result = await cerebras_client.complete_json(
+                        f'Act as {role}. Return JSON with summary and findings. Analyze supplied source, error and contract only. Do not invent execution, probes, deployment actions or commit history. Explicitly state missing evidence. Git Detective must report unavailable history rather than name a commit. Infra Checker must distinguish supplied telemetry from live probes. Impact Analyst checks currency contract and gateway side effects. Mitigation Planner recommends containment without claiming execution.',
+                        json.dumps({'source': source, 'error': error, 'contract': contract}))
+                    return {'agent_name': role, 'summary': result['summary'], 'findings': result.get('findings', {}),
+                            'status': 'COMPLETED', 'duration_ms': int((time.perf_counter()-tick)*1000), 'logs': []}
+                except Exception as exc:
+                    return {'agent_name': role, 'summary': str(exc), 'status': 'FAILED',
+                            'duration_ms': int((time.perf_counter()-tick)*1000), 'findings': {}, 'logs': []}
+            analyses_by_role = {
+                role: {'agent_name': role, 'status': 'ANALYZING',
+                       'summary': 'Analyzing supplied evidence...', 'duration_ms': 0,
+                       'logs': [], 'findings': {}}
+                for role in ROLES
+            }
+            tasks = [asyncio.create_task(analyze(role)) for role in ROLES]
+            for completed in asyncio.as_completed(tasks):
+                result = await completed
+                analyses_by_role[result['agent_name']] = result
+                emit('agent_progress', agents=[analyses_by_role[role] for role in ROLES])
+            analyses = [analyses_by_role[role] for role in ROLES]
+            emit('agent_completed', agents=analyses)
+        if any(a['status'] == 'FAILED' for a in analyses):
+            raise RuntimeError('Parallel analysis failed: ' + '; '.join(a['summary'] for a in analyses if a['status'] == 'FAILED'))
+        emit('repair_started', status='SPECULATIVE_REPAIR')
+        if state['mode'] == 'fixture':
+            root = FIXTURE.parent / 'candidates'
+            candidates = [{'id': name, 'code': (root / f'{name}.cjs').read_text()} for name in ['bad', 'correct']]
+        else:
+            candidates = await generate_candidates(source, error, contract, analyses, tests)
+        emit('validation_started', status='VALIDATING', generator='fixture files' if state['mode'] == 'fixture' else 'Codex')
+        patches = await asyncio.to_thread(rank_and_select_winner, candidates, source)
+        emit('patch_verified', patches=patches)
+        winner = next((p for p in patches if p['isWinner']), None)
+        if winner is None:
+            raise RuntimeError('All candidates failed execution. No PR created.')
+        if state['publish']:
+            if not claim_action(incident_id, 'github-publication'):
+                emit('publishing_failed', status='PUBLISH_FAILED',
+                     error='Publication was already attempted for this incident.', pr_url=None)
+                return
+            try:
+                publishing = await create_draft_pull_request(incident_id, source, winner)
+            except Exception as exc:
+                emit('publishing_failed', status='PUBLISH_FAILED', error=str(exc), pr_url=None)
+                return
+            publishing.pop('status', None)
+            emit('incident_completed', status='RESOLVED', **publishing)
+        else:
+            emit('incident_completed', status='VALIDATED', pr_url=None)
+    except Exception as exc:
+        emit('incident_failed', status='FAILED', error=f'{type(exc).__name__}: {exc}', pr_url=None)

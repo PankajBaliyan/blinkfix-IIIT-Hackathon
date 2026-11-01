@@ -1,66 +1,39 @@
-import httpx
 import json
-import logging
-import asyncio
-from typing import Dict, Any, Optional
+import httpx
+from pydantic import ValidationError
 from ..config import settings
+from ..provider_models import AnalysisResponse
 
-logger = logging.getLogger("blinkfix.cerebras")
 
 class CerebrasClient:
-    def __init__(self):
-        self.api_key = settings.CEREBRAS_API_KEY
-        self.api_base = settings.CEREBRAS_API_BASE
-        self.model = settings.CEREBRAS_MODEL
-        self._http_client: Optional[httpx.AsyncClient] = None
-
-    async def get_http_client(self) -> httpx.AsyncClient:
-        if self._http_client is None or self._http_client.is_closed:
-            self._http_client = httpx.AsyncClient(
-                timeout=httpx.Timeout(10.0, connect=3.0),
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-            )
-        return self._http_client
-
     async def close(self):
-        if self._http_client and not self._http_client.is_closed:
-            await self._http_client.aclose()
+        pass
 
-    async def complete_json(
-        self,
-        system_prompt: str,
-        user_prompt: str,
-        temperature: float = 0.1,
-    ) -> Dict[str, Any]:
-        """Calls Cerebras API with JSON response format, or falls back to demo mode."""
-        if not self.api_key or settings.DEMO_MODE:
-            # Deterministic sub-second simulated response
-            await asyncio.sleep(0.18)
-            return {"status": "ok", "mode": "simulated"}
-
-        client = await self.get_http_client()
-        payload = {
-            "model": self.model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            "temperature": temperature,
-            "response_format": {"type": "json_object"},
-        }
-
+    async def complete_json(self, system_prompt, user_prompt, temperature=0.1):
+        if not settings.CEREBRAS_API_KEY:
+            raise RuntimeError('CEREBRAS_API_KEY is required for live analysis')
         try:
-            resp = await client.post(f"{self.api_base}/chat/completions", json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            content = data["choices"][0]["message"]["content"]
-            return json.loads(content)
-        except Exception as e:
-            logger.warning(f"Cerebras API call failed: {e}. Falling back to demo mode.")
-            return {"status": "fallback", "error": str(e)}
+            async with httpx.AsyncClient(timeout=45) as client:
+                response = await client.post(
+                    f'{settings.CEREBRAS_API_BASE}/chat/completions',
+                    headers={'Authorization': f'Bearer {settings.CEREBRAS_API_KEY}'},
+                    json={'model': settings.CEREBRAS_MODEL,
+                          'messages': [{'role': 'system', 'content': system_prompt},
+                                       {'role': 'user', 'content': user_prompt}],
+                          'temperature': temperature, 'response_format': {'type': 'json_object'}},
+                )
+        except httpx.TimeoutException as exc:
+            raise RuntimeError('Cerebras request timed out after 45 seconds') from exc
+        if response.is_error:
+            raise RuntimeError(f'Cerebras HTTP {response.status_code}; check credentials/model/quota')
+        try:
+            body = response.json()
+            payload = json.loads(body['choices'][0]['message']['content'])
+            validated = AnalysisResponse.model_validate(payload).model_dump()
+            validated['provider_usage'] = body.get('usage')
+            return validated
+        except (ValueError, KeyError, TypeError, ValidationError) as exc:
+            raise RuntimeError('Cerebras returned malformed analysis JSON') from exc
+
 
 cerebras_client = CerebrasClient()
-

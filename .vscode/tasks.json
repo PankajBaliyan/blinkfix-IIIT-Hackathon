@@ -1,0 +1,19 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Blinkfix backend",
+			"type": "shell",
+			"command": "& '${workspaceFolder}/server/.venv/Scripts/python.exe' -m uvicorn app.main:app --app-dir '${workspaceFolder}/server' --host 127.0.0.1 --port 8000",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Blinkfix frontend",
+			"type": "shell",
+			"command": "npm.cmd --prefix '${workspaceFolder}/client' run dev -- --host 127.0.0.1 --port 5173 --strictPort",
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}

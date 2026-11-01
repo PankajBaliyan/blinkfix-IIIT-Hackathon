@@ -1,0 +1,13 @@
+{
+  "id": "express-4893",
+  "repository": "https://github.com/expressjs/express.git",
+  "broken_revision": "947b6b7d57939d1a3b33ce008765f9aba3eb6f70",
+  "report_url": "https://github.com/expressjs/express/pull/4893",
+  "upstream_merge_revision": "18e5985b8a9d5e8423db0a9121f22bdaecd5b120",
+  "target_file": "lib/response.js",
+  "install_command": ["npm", "install", "--ignore-scripts", "--no-audit", "--no-fund"],
+  "syntax_command": ["node", "--check", "lib/response.js"],
+  "reproducer_command": ["node", "--test", ".blinkfix-tests/res-send-transfer-encoding.test.cjs"],
+  "regression_command": ["npx", "mocha", "--require", "test/support/env", "--reporter", "dot", "--bail", "test/res.send.js"],
+  "report": "When an Express route sets Transfer-Encoding and then calls res.send(), the response must not also contain Content-Length. Demonstrate the conflict on the reported broken revision and repair only lib/response.js."
+}

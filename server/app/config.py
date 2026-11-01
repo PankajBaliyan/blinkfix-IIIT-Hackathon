@@ -37,9 +37,11 @@ class Settings:
     DATABASE_PATH: Path = BASE_DIR / os.getenv("DATABASE_PATH", "data/blinkfix.db")
 
     # Deployment Context File
-    CONTEXT_PATH: Path = BASE_DIR / "data" / "context.json"
 
     # Demo Mode
     DEMO_MODE: bool = os.getenv("DEMO_MODE", "true").lower() in ("true", "1", "yes")
+    OPENAI_API_KEY: str = os.getenv('OPENAI_API_KEY', '')
+    CODEX_MODEL: str = os.getenv('CODEX_MODEL', 'gpt-5.3-codex')
+    GITHUB_TARGET_FILE: str = os.getenv('GITHUB_TARGET_FILE', 'payments.cjs')
 
 settings = Settings()

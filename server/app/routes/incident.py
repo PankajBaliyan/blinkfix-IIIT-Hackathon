@@ -1,78 +1,71 @@
+from datetime import datetime, timezone
+from typing import Literal
 import uuid
-import asyncio
-from fastapi import APIRouter, HTTPException, BackgroundTasks
-from ..models.schemas import (
-    SimulateRequest,
-    CrashPayload,
-    RollbackApprovalRequest,
-)
+from fastapi import APIRouter, BackgroundTasks, HTTPException
+from pydantic import BaseModel, Field
+from ..state import create_run, get_state, list_states
 from ..services.orchestrator import run_incident_orchestration
-from ..database import get_incident, update_incident, list_recent_incidents
+from ..services.patch_validator import FIXTURE
 
-router = APIRouter(prefix="/api/incidents", tags=["incidents"])
+router = APIRouter(prefix='/api/incidents', tags=['incidents'])
 
-@router.post("/simulate")
-async def simulate_outage(request: SimulateRequest, background_tasks: BackgroundTasks):
-    """Triggers an autonomous incident simulation."""
-    incident_id = f"inc_{uuid.uuid4().hex[:8]}"
 
-    payload = request.customCrash or CrashPayload(
-        eventId=incident_id,
-        level="error",
-        service="checkout-service",
-        message="TypeError: Cannot read properties of undefined (reading 'exchangeRate')",
-        exceptionType="TypeError",
-        file="src/payments.js",
-        line=5,
-        functionName="processPayment",
-    )
+class RunRequest(BaseModel):
+    requestId: str = Field(default_factory=lambda: uuid.uuid4().hex, min_length=8, max_length=100)
+    scenarioId: Literal['payments-typeerror', 'stripe-timeout'] = 'payments-typeerror'
+    mode: Literal['live', 'fixture'] = 'live'
+    publish: bool = False
+    source: str | None = Field(default=None, max_length=30000)
 
-    # Launch orchestration in background so API responds instantly
-    background_tasks.add_task(run_incident_orchestration, incident_id, payload)
 
-    return {
-        "status": "initiated",
-        "incident_id": incident_id,
-        "service": payload.service,
-        "message": "Incident investigation launched across parallel Cerebras agent swarm.",
-    }
+@router.post('/simulate')
+async def simulate_outage(request: RunRequest, background_tasks: BackgroundTasks):
+    if request.mode == 'fixture' and request.publish:
+        raise HTTPException(400, 'Fixture runs cannot publish PRs')
+    incident_id = 'inc_' + uuid.uuid4().hex[:12]
+    source = request.source if request.source is not None else (FIXTURE / 'payments.cjs').read_text()
+    incident_id, created = create_run(request.requestId, incident_id, {
+        'status': 'TRIGGERED', 'scenario_id': request.scenarioId, 'mode': request.mode,
+        'publish': request.publish, 'source': source, 'agents': [], 'patches': [],
+        'started_at': datetime.now(timezone.utc).isoformat(), 'duration_ms': 0,
+        'pr_url': None, 'error': None, 'mitigation': None,
+    })
+    if created:
+        background_tasks.add_task(run_incident_orchestration, incident_id)
+    return {'status': 'initiated' if created else 'existing', 'incident_id': incident_id}
 
-@router.post("/webhook/crash")
-async def crash_webhook(payload: CrashPayload, background_tasks: BackgroundTasks):
-    """Custom webhook receiver for Sentry / production crash payloads."""
-    incident_id = payload.eventId or f"inc_{uuid.uuid4().hex[:8]}"
-    background_tasks.add_task(run_incident_orchestration, incident_id, payload)
-    return {
-        "status": "ingested",
-        "incident_id": incident_id,
-        "service": payload.service,
-    }
 
-@router.get("/{incident_id}")
+@router.get('/{incident_id}')
 async def get_incident_details(incident_id: str):
-    """Fetches full state and diagnosis for an incident from SQLite."""
-    data = get_incident(incident_id)
-    if not data:
-        raise HTTPException(status_code=404, detail="Incident not found")
-    return data
+    state = get_state(incident_id)
+    if not state:
+        raise HTTPException(404, 'Incident not found')
+    return state
 
-@router.post("/{incident_id}/rollback")
-async def approve_rollback(incident_id: str, request: RollbackApprovalRequest):
-    """Human-in-the-loop authorization to execute simulated rollback."""
-    incident = get_incident(incident_id)
-    if not incident:
-        raise HTTPException(status_code=404, detail="Incident not found")
 
-    update_incident(incident_id, {"rollback_approved": 1})
+@router.get('/reports/rehearsals/live')
+async def live_rehearsal_report(limit: int = 5):
+    limit = max(1, min(limit, 20))
+    runs = list_states(limit=limit, mode='live', scenario_id='payments-typeerror')
+    rows = []
+    for run in runs:
+        error = run.get('error') or ''
+        rows.append({
+            'id': run['id'], 'status': run.get('status'),
+            'duration_ms': run.get('duration_ms', 0),
+            'model_failure': run.get('status') == 'FAILED' and any(
+                marker in error for marker in ('Cerebras', 'Codex', 'Parallel analysis')),
+            'publication_failure': run.get('status') == 'PUBLISH_FAILED',
+            'published': bool(run.get('pr_url')),
+            'pr_url': run.get('pr_url'), 'started_at': run.get('started_at'),
+            'error': error or None,
+        })
     return {
-        "status": "rollback_approved",
-        "incident_id": incident_id,
-        "approved_by": request.approvedBy,
-        "action": "Dispatched Kubernetes deployment rollback to v1.0.3",
+        'requested_runs': 5,
+        'recorded_runs': len(rows),
+        'successful_runs': sum(row['status'] in ('VALIDATED', 'RESOLVED') for row in rows),
+        'total_duration_ms': sum(row['duration_ms'] for row in rows),
+        'model_failures': sum(row['model_failure'] for row in rows),
+        'publication_failures': sum(row['publication_failure'] for row in rows),
+        'runs': rows,
     }
-
-@router.get("/")
-async def get_recent_incidents():
-    """Lists recent incidents stored in the SQLite database file."""
-    return {"incidents": list_recent_incidents(limit=20)}
-

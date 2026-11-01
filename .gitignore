@@ -1,100 +1,14 @@
-# ==============================================================================
-# Blinkfix / Swarm Zero - Git Ignore Configuration
-# ==============================================================================
-
-# Operating System & Filesystem Artifacts
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Environment Variables & Secrets (Keep .env.example tracked)
-.env
-.env.*
-!.env.example
-server/.env
-server/.env.*
-!server/.env.example
-client/.env.local
-client/.env.*.local
-*.pem
-*.key
-*.cert
-
-# Python & Virtual Environments
+node_modules/
+dist/
+.venv/
+venv/
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-server/venv/
-venv/
-.venv/
-env/
-ENV/
-env.bak/
-venv.bak/
-build/
-develop-eggs/
-eggs/
-.eggs/
-parts/
-var/
-sdist/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-.pytest_cache/
-.coverage
-htmlcov/
-.mypy_cache/
-.ruff_cache/
-
-# Node.js & Frontend Build Outputs
-node_modules/
-client/node_modules/
-client/dist/
-dist/
-dist-ssr/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-.eslintcache
-.stylelintcache
-
-# Local SQLite Databases & Logs
-*.db
-*.db-shm
-*.db-wal
-*.sqlite
-*.sqlite3
+.env
+.env.local
+.env.*.local
+.DS_Store
 server/data/*.db
 server/data/*.db-shm
 server/data/*.db-wal
-!server/data/context.json
-
-# IDEs & Code Editors
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-.idea/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-*~
-
-# Temporary & Cache Directories
-.cache/
-tmp/
-temp/
-
+.blinkfix/

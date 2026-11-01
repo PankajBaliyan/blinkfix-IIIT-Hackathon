@@ -1,0 +1,45 @@
+{
+  "status": "REPRODUCED",
+  "bug_id": "express-4893",
+  "repository": "https://github.com/expressjs/express.git",
+  "revision": "947b6b7d57939d1a3b33ce008765f9aba3eb6f70",
+  "target_file": "lib/response.js",
+  "report_url": "https://github.com/expressjs/express/pull/4893",
+  "agent_input_excludes": [
+    "upstream patch",
+    "upstream post-fix tests"
+  ],
+  "upstream_reference_reserved": true,
+  "reproduction": {
+    "origin": "blinkfix-added",
+    "command": [
+      "node",
+      "--test",
+      ".blinkfix-tests/res-send-transfer-encoding.test.cjs"
+    ],
+    "exit_code": 1,
+    "stdout": "\u2716 res.send does not combine Transfer-Encoding and Content-Length (32.853ms)\n\u2139 tests 1\n\u2139 suites 0\n\u2139 pass 0\n\u2139 fail 1\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 327.9479\n\n\u2716 failing tests:\n\ntest at .blinkfix-tests\\res-send-transfer-encoding.test.cjs:20:1\n\u2716 res.send does not combine Transfer-Encoding and Content-Length (32.853ms)\n  AssertionError [ERR_ASSERTION]: The input was expected to not match the regular expression /\\r\\ncontent-length:/. Input:\n  \n  'http/1.1 200 ok\\r\\n' +\n    'x-powered-by: express\\r\\n' +\n    'transfer-encoding: chunked\\r\\n' +\n    'content-type: text/html; charset=utf-8\\r\\n' +\n    'content-length: 5\\r\\n' +\n    'etag: w/\"5-qvtghdzf6klavt4po0gs2a6pq00\"\\r\\n' +\n    'date: sun, 01 nov 2026 05:59:19 gmt\\r\\n' +\n    'connection: close'\n  \n      at TestContext.<anonymous> (<USER_HOME>\\Downloads\\Blinkfix\\.blinkfix\\workspaces\\express-4893\\.blinkfix-tests\\res-send-transfer-encoding.test.cjs:31:12)\n      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n      at async Test.run (node:internal/test_runner/test:1409:7)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: 'http/1.1 200 ok\\r\\nx-powered-by: express\\r\\ntransfer-encoding: chunked\\r\\ncontent-type: text/html; charset=utf-8\\r\\ncontent-length: 5\\r\\netag: w/\"5-qvtghdzf6klavt4po0gs2a6pq00\"\\r\\ndate: sun, 01 nov 2026 05:59:19 gmt\\r\\nconnection: close',\n    expected: /\\r\\ncontent-length:/,\n    operator: 'doesNotMatch',\n    diff: 'simple'\n  }\n",
+    "stderr": "",
+    "timed_out": false,
+    "duration_ms": 425
+  },
+  "regression": {
+    "origin": "repository-unchanged",
+    "command": [
+      "npx",
+      "mocha",
+      "--require",
+      "test/support/env",
+      "--reporter",
+      "dot",
+      "--bail",
+      "test/res.send.js"
+    ],
+    "exit_code": 0,
+    "stdout": "\n\n  ........................................................\n  ..............\n\n  70 passing (262ms)\n\n",
+    "stderr": "",
+    "timed_out": false,
+    "duration_ms": 4570
+  },
+  "git_history": "d0e166c3c6eaf80871b7f38839ea90e048452844\t2022-02-28T16:38:06+09:00\tdocs: fix typo in private api jsdoc\n89bb531b311e2670a12dc020d69adb91327aa7e0\t2022-02-03T23:54:57-03:00\tdocs: fix typo in res.download jsdoc\nf275e87dff1aaef86080e6931888de4968585fd8\t2021-11-03T10:58:25Z\tFix handling of undefined when \"json escape\" is enabled\n9dd0e7afdb6d022e18add1e009c4e3a66258c1fa\t2021-11-16T23:58:17-05:00\tFix handling of undefined in res.jsonp\na1dbb113779c45a10f56a910de1bc5f7e750eaea\t2020-01-08T10:56:45+09:00\tFix res.jsonp(obj, status) deprecation message\nde081eb70fac96db567f88c540b4d487f0c97864\t2021-09-01T19:27:00-04:00\tbuild: eslint@4.19.1\nf9a0560a9cb5ee2fcb901a6ed3710e9ffb6aa55c\t2021-08-12T14:35:46+08:00\tdocs: fix res.sendStatus/sendFile jsdoc comments\n135a05c524796329a97f4bdb69a00f765dd80393\t2021-04-11T22:28:56+02:00\tdocs: fix typos in jsdoc\n"
+}
