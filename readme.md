@@ -9,7 +9,7 @@ Built for the IIIT Hackathon. Track: AI-driven DevOps and developer productivity
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6.svg?style=flat&logo=typescript&logoColor=white)
 ![Tailwind](https://img.shields.io/badge/Tailwind_CSS-3.4-38B2AC.svg?style=flat&logo=tailwind-css&logoColor=white)
 
----
+
 
 ## What it does
 
