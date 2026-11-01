@@ -77,11 +77,15 @@ def _require_success(result: dict, stage: str) -> None:
 
 
 def prepare_repository(bug_id: str, install: bool = True) -> dict:
+    overall_started = time.perf_counter()
+    setup_started = time.perf_counter()
     manifest = load_manifest(bug_id)
     workspace = WORKSPACES_ROOT / manifest.id
     workspace.parent.mkdir(parents=True, exist_ok=True)
     setup_commands = []
-    if not (workspace / '.git').is_dir():
+    cloned = not (workspace / '.git').is_dir()
+    installed = False
+    if cloned:
         clone = run_command(['git', 'clone', manifest.repository, str(workspace)], workspace.parent, 300)
         setup_commands.append(clone)
         _require_success(clone, 'Repository clone')
@@ -100,14 +104,25 @@ def prepare_repository(bug_id: str, install: bool = True) -> dict:
         dependency_install = run_command(manifest.install_command, workspace, 300)
         setup_commands.append(dependency_install)
         _require_success(dependency_install, 'Dependency installation')
+        installed = True
 
     test_dir = workspace / '.blinkfix-tests'
     test_dir.mkdir(exist_ok=True)
     shutil.copy2(BUGS_ROOT / bug_id / 'reproducer.test.cjs',
                  test_dir / 'res-send-transfer-encoding.test.cjs')
+    environment = {
+        'node': run_command(['node', '--version'], workspace),
+        'npm': run_command(['npm', '--version'], workspace),
+        'resolved_dependencies': run_command(['npm', 'ls', '--all', '--json'], workspace, 60),
+    }
+    setup_duration = int((time.perf_counter() - setup_started) * 1000)
+    regression_started = time.perf_counter()
     regression = run_command(manifest.regression_command, workspace)
     _require_success(regression, 'Unchanged repository regression baseline')
+    regression_duration = int((time.perf_counter() - regression_started) * 1000)
+    reproduction_started = time.perf_counter()
     reproduction = run_command(manifest.reproducer_command, workspace)
+    reproduction_duration = int((time.perf_counter() - reproduction_started) * 1000)
     if reproduction['timed_out']:
         raise RuntimeError('Reproducer timed out; expected behavior is not established')
     if reproduction['exit_code'] == 0:
@@ -125,6 +140,19 @@ def prepare_repository(bug_id: str, install: bool = True) -> dict:
         'source': source, 'git_history': history['stdout'], 'head_target_diff': head_diff['stdout'],
         'setup_commands': setup_commands, 'reproduction': {'origin': 'blinkfix-added', **reproduction},
         'regression': {'origin': 'repository-unchanged', **regression},
+        'regression_scope': {
+            'kind': 'focused', 'command': manifest.regression_command,
+            'files': ['test/res.send.js'], 'observed_passing_tests': 70,
+            'full_regression_suite': False,
+        },
+        'environment': environment,
+        'cache_state': 'cold' if cloned or installed else 'cached',
+        'phase_timings_ms': {
+            'environment_setup': setup_duration,
+            'baseline_regression': regression_duration,
+            'reproduction': reproduction_duration,
+            'total': int((time.perf_counter() - overall_started) * 1000),
+        },
         'agent_input_excludes': ['upstream patch', 'upstream post-fix tests'],
         'upstream_reference_reserved': True,
     }

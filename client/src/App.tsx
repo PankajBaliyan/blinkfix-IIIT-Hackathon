@@ -65,7 +65,15 @@ function RehearsalReport({ report }: { report: RehearsalReport | null }) {
 
 export default function App() {
   const s = useSimulation(); const run = s.run;
-  const displayedAgents: AgentResult[] = roles.map(role => run?.agents.find(agent => agent.agent_name === role) || { agent_name: role, status: 'IDLE', summary: run?.scenario_id === 'stripe-timeout' ? 'Bypassed: infrastructure incidents do not enter code analysis.' : 'Waiting for incident evidence.', duration_ms: 0, findings: {} });
+  const displayedAgents: AgentResult[] = roles.map(role => run?.agents.find(agent => agent.agent_name === role) || {
+    agent_name: role,
+    status: run?.scenario_id === 'stripe-timeout' ? 'SKIPPED' : 'IDLE',
+    summary: run?.scenario_id === 'stripe-timeout'
+      ? 'Bypassed: infrastructure incidents do not enter code analysis.'
+      : 'Waiting for incident evidence.',
+    duration_ms: 0,
+    findings: {},
+  });
   const modeLabel = (run?.scenario_id || s.scenario) === 'stripe-timeout' ? 'Infrastructure fixture' : (run?.mode || s.mode) === 'fixture' ? 'Offline fixture' : 'Live';
   const outcome = run ? terminalLabels[run.status] || 'Run in progress' : 'Ready to run';
   const timerLabel = run?.status === 'RESOLVED' ? 'Time to draft PR' : run?.status === 'MITIGATED' ? 'Time to recommendation' : 'Time to validated fix';

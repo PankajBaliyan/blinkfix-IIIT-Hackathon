@@ -51,7 +51,10 @@ export function useSimulation() {
         const state = restored.value;
         applyState(state); setScenario(state.scenario_id); setMode(state.mode); setSource(state.source); setPublish(false);
         if (!terminal.has(state.status)) attach(state.id, token);
-      } else if (id) localStorage.removeItem('blinkfix-incident');
+      } else if (id && restored.status === 'rejected') {
+        setConnection('disconnected');
+        setError(previous => previous || 'Backend unavailable. The saved incident will recover after reconnection.');
+      }
       setLoading(false);
     });
     return () => { generation.current++; close.current?.(); };

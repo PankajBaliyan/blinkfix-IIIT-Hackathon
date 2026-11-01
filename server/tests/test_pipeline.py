@@ -338,12 +338,25 @@ class RealRepositoryWorkflowTests(unittest.TestCase):
         self.assertEqual(result['exit_code'], 0)
 
     def test_reproduction_failure_abstains_before_models(self):
-        with patch.object(real_bug_orchestrator, 'prepare_repository', side_effect=RuntimeError('did not reproduce')), \
+        with patch.object(settings, 'OPENAI_API_KEY', 'test'), \
+             patch.object(settings, 'CEREBRAS_API_KEY', 'test'), \
+             patch.object(real_bug_orchestrator, 'prepare_repository', side_effect=RuntimeError('did not reproduce')), \
              patch.object(real_bug_orchestrator, 'generate_repository_candidates', new_callable=AsyncMock) as generate:
             result = asyncio.run(real_bug_orchestrator.repair_real_bug('express-4893'))
         self.assertEqual(result['status'], 'ABSTAINED')
         self.assertEqual(result['stage'], 'reproduction')
         generate.assert_not_called()
+
+    def test_missing_credentials_abstain_before_repository_setup(self):
+        with patch.object(settings, 'OPENAI_API_KEY', ''), \
+             patch.object(settings, 'CEREBRAS_API_KEY', ''), \
+             patch.object(real_bug_orchestrator, 'prepare_repository') as prepare:
+            result = asyncio.run(real_bug_orchestrator.repair_real_bug('express-4893'))
+        self.assertEqual(result['status'], 'ABSTAINED')
+        self.assertEqual(result['stage'], 'provider')
+        self.assertEqual(result['cache_state'], 'not_started')
+        self.assertEqual(result['phase_timings_ms']['environment_setup'], 0)
+        prepare.assert_not_called()
 
     def test_mocked_parallel_path_uses_evidence_roles_and_executable_winner(self):
         prepared = {
