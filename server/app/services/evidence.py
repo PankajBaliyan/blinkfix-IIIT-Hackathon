@@ -6,7 +6,7 @@ from ..models.schemas import CrashPayload
 from .log_store import format_log_line
 
 # Anything that could close or fake one of our own tags is stripped from untrusted text.
-_TAG = re.compile(r"</?\s*(evidence|incident|stack_trace|source|logs|recent_commits|imports|repository|blame)\b[^>]*>", re.I)
+_TAG = re.compile(r"</?\s*(evidence|incident|stack_trace|source|logs|recent_commits|imports|repository|blame|traffic)\b[^>]*>", re.I)
 
 
 def _clean(text: Optional[str]) -> str:
@@ -51,6 +51,12 @@ class Evidence:
             f"location: {p.file}:{p.line} in {p.functionName or 'unknown'}()",
             "</incident>",
         ]
+        traffic = self.context.get("traffic")
+        if traffic and traffic.get("total"):
+            parts.append(
+                f"<traffic>{traffic['failed']} of {traffic['total']} requests to {p.method} {p.route} "
+                f"ended in an unhandled error in the last {traffic['window_minutes']} minutes</traffic>"
+            )
         if p.stackTrace:
             parts += ["<stack_trace>", _clean(p.stackTrace).rstrip(), "</stack_trace>"]
 

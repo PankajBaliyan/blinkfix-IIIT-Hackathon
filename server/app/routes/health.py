@@ -39,7 +39,7 @@ async def health_check():
             "model": settings.CODEX_MODEL or None,
             "key_set": bool(settings.OPENAI_API_KEY),
         },
-        "demo_mode": settings.DEMO_MODE,
+        "slack": {"configured": bool(settings.SLACK_WEBHOOK_URL)},
         "auto_open_pr": settings.AUTO_OPEN_PR,
     }
 

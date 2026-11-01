@@ -4,7 +4,6 @@ from typing import Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from ..models.schemas import (
-    SimulateRequest,
     CrashPayload,
     RollbackApprovalRequest,
 )
@@ -18,32 +17,6 @@ from ..database import get_integration
 from ..services.incident_view import build_incident_detail, list_incident_summaries
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
-
-@router.post("/simulate")
-async def simulate_outage(request: SimulateRequest, background_tasks: BackgroundTasks):
-    """Triggers an autonomous incident simulation."""
-    incident_id = f"inc_{uuid.uuid4().hex[:8]}"
-
-    payload = request.customCrash or CrashPayload(
-        eventId=incident_id,
-        level="error",
-        service="checkout-service",
-        message="TypeError: Cannot read properties of undefined (reading 'exchangeRate')",
-        exceptionType="TypeError",
-        file="src/payments.js",
-        line=5,
-        functionName="processPayment",
-    )
-
-    # Launch orchestration in background so API responds instantly
-    background_tasks.add_task(run_incident_orchestration, incident_id, payload)
-
-    return {
-        "status": "initiated",
-        "incident_id": incident_id,
-        "service": payload.service,
-        "message": "Incident investigation launched across parallel Cerebras agent swarm.",
-    }
 
 @router.post("/webhook/crash")
 async def crash_webhook(payload: CrashPayload, background_tasks: BackgroundTasks):
@@ -72,7 +45,7 @@ async def get_incident_details(incident_id: str):
 
 @router.post("/{incident_id}/rollback")
 async def approve_rollback(incident_id: str, request: RollbackApprovalRequest):
-    """Human-in-the-loop authorization to execute simulated rollback."""
+    """Records that a person approved the recommended mitigation. Blinkfix does not carry it out."""
     incident = get_incident(incident_id)
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
@@ -83,7 +56,7 @@ async def approve_rollback(incident_id: str, request: RollbackApprovalRequest):
         "status": "rollback_approved",
         "incident_id": incident_id,
         "approved_by": request.approvedBy,
-        "action": "Dispatched Kubernetes deployment rollback to v1.0.3",
+        "note": "Approval recorded. Blinkfix does not run rollbacks or failovers itself, so someone has to carry the action out.",
     }
 
 class PullRequestRequest(BaseModel):

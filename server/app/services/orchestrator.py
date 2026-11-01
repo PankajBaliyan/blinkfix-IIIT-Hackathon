@@ -19,6 +19,7 @@ from .code_source import SourceFile, load_source_file
 from .codex_agent import run_codex_fix
 from .context_service import build_deployment_context
 from .evidence import Evidence
+from .log_store import log_store
 from .incident_events import publish_incident_update
 from .patch_generator import build_candidate_patches
 from .patch_validator import rank_and_select_winner, rank_validated
@@ -106,6 +107,8 @@ async def _orchestrate(incident_id: str, payload: CrashPayload, logs: List[Dict[
 
     # 2. Gather what GitHub knows: commit history, git blame, dependencies and the failing file itself
     context, source = await asyncio.gather(build_deployment_context(payload), load_source_file(payload))
+    if payload.route:
+        context["traffic"] = log_store.request_stats(payload.service, payload.method or "GET", payload.route)
     snippet_wide = snippet_from_text(source.file, source.text, source.line, 15) if source else None
     snippet_ui = snippet_from_text(source.file, source.text, source.line, 4) if source else None
     if snippet_ui and source:

@@ -1,4 +1,5 @@
 import asyncio
+import re
 from typing import Dict, Any, List, Optional
 from .base import BaseAgent, text_field
 from ..models.schemas import CrashPayload
@@ -6,27 +7,13 @@ from ..services.diagnosis import is_external_failure
 from ..services.evidence import Evidence
 
 DIAGNOSES = {"LOCAL_CODE_BUG", "EXTERNAL_OUTAGE"}
-DEPENDENCIES = ["Stripe API Gateway", "Redis Session Store", "PostgreSQL Primary"]
+_HOST = re.compile(r"\b((?:[a-z0-9-]+\.)+[a-z]{2,})\b", re.I)
 
 
-def _services(down: Optional[str]) -> List[Dict[str, Any]]:
-    """Dependency table. The values are placeholders until real health probes exist."""
-    healthy = {"Stripe API Gateway": 38, "Redis Session Store": 2, "PostgreSQL Primary": 12}
-    return [
-        {"service": s, "status": "DOWN", "latencyMs": 5000}
-        if s == down
-        else {"service": s, "status": "HEALTHY", "latencyMs": healthy[s]}
-        for s in DEPENDENCIES
-    ]
-
-
-def _match_dependency(name: Optional[str]) -> str:
-    """Maps the model's free-text suspect to one of the dependencies we list."""
-    lowered = (name or "").lower()
-    for dep in DEPENDENCIES:
-        if dep.split()[0].lower() in lowered:
-            return dep
-    return DEPENDENCIES[0]
+def _host_in(text: str) -> Optional[str]:
+    """A hostname mentioned in an error, such as api.stripe.com."""
+    match = _HOST.search(text or "")
+    return match.group(1) if match else None
 
 
 class InfraChecker(BaseAgent):
@@ -35,10 +22,12 @@ class InfraChecker(BaseAgent):
     role = "Tells a bug in our code apart from an outside service failing"
     task = (
         "Decide whether this crash is a bug in our own code (LOCAL_CODE_BUG) or caused by an outside "
-        "service such as a payment provider, cache or database being unavailable (EXTERNAL_OUTAGE).\n"
+        "service such as a payment provider, cache or database being unavailable (EXTERNAL_OUTAGE). "
+        "Base this only on the evidence: the error text, the stack trace and the source.\n"
         'Return JSON: {"diagnosis": "LOCAL_CODE_BUG" or "EXTERNAL_OUTAGE", "summary": string, '
         '"suspect_dependency": string or null}\n'
-        "summary: one sentence with the evidence for your decision."
+        "summary: one sentence with the evidence for your decision. "
+        "suspect_dependency: the outside service or host, or null for a bug in our own code."
     )
 
     async def run_agent_logic(
@@ -51,36 +40,28 @@ class InfraChecker(BaseAgent):
         if diagnosis in DIAGNOSES and summary:
             self.accept_model_answer()
             external = diagnosis == "EXTERNAL_OUTAGE"
-            suspect = _match_dependency(answer.get("suspect_dependency")) if external else None
+            suspect = (text_field(answer, "suspect_dependency", 80) or _host_in(payload.message)) if external else None
             self.note(logs, f"Categorized incident as {diagnosis}.")
-            return {
-                "summary": summary,
-                "findings": {
-                    "diagnosis": diagnosis,
-                    "is_external": external,
-                    "suspect_dependency": suspect,
-                    "services": _services(suspect),
-                    "services_simulated": True,
-                    "dependencies": context.get("dependencies", {}),
-                },
-            }
-
-        # Built-in demo analysis
-        await asyncio.sleep(0.28)
-        external = is_external_failure(payload)
-        diagnosis = "EXTERNAL_OUTAGE" if external else "LOCAL_CODE_BUG"
-        if external:
-            summary = "Stripe API Gateway timed out. Upstream 3rd-party outage detected."
         else:
-            summary = "All upstream APIs healthy (Stripe, Redis, DB). Confirmed local code bug."
-        self.note(logs, f"Categorized incident as {diagnosis}.")
+            # Built-in analysis: look for the signs of a failing outside service in the error text
+            await asyncio.sleep(0.2)
+            external = is_external_failure(payload)
+            diagnosis = "EXTERNAL_OUTAGE" if external else "LOCAL_CODE_BUG"
+            suspect = _host_in(payload.message) if external else None
+            summary = (
+                f"The error looks like an outside service failing ({suspect or 'unknown service'})."
+                if external
+                else "The error does not point to an outside service, so it looks like a bug in our own code."
+            )
+            self.note(logs, f"Categorized incident as {diagnosis}.")
+
         return {
             "summary": summary,
             "findings": {
                 "diagnosis": diagnosis,
                 "is_external": external,
-                "services": _services(DEPENDENCIES[0] if external else None),
-                "services_simulated": True,
+                "suspect_dependency": suspect,
+                # Read from the repository's requirements.txt, so these are real.
                 "dependencies": context.get("dependencies", {}),
             },
         }

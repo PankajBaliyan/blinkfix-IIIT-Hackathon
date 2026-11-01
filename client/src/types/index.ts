@@ -87,15 +87,10 @@ export interface SourceSnippet {
   repoPath?: string;
 }
 
-export interface OutsideService {
-  service: string;
-  status: 'HEALTHY' | 'DEGRADED' | 'DOWN';
-  latencyMs: number;
-}
-
 export interface IncidentDetail extends IncidentSummary {
   environment: string | null;
-  demoMode: boolean;
+  /** True when a Slack webhook is set, so the Slack message is really sent. */
+  slackLive: boolean;
   culpritCommit: string | null;
   winningPatchId: string | null;
   error: {
@@ -128,15 +123,17 @@ export interface IncidentDetail extends IncidentSummary {
   } | null;
   impact: {
     scope: string;
-    impact_percentage: string;
+    /** A sentence built from real request counts, such as "3 of 4 recent requests to POST /x failed". */
+    recent_failures: string;
     severity: string;
     affected_routes: string[];
   } | null;
   infra: {
     diagnosis: string;
     is_external: boolean;
-    services: OutsideService[];
-    services_simulated?: boolean;
+    suspect_dependency: string | null;
+    /** Read from the repository's requirements.txt. */
+    dependencies: Record<string, string>;
   } | null;
   mitigation: {
     action: string;
@@ -158,7 +155,7 @@ export interface IncidentDetail extends IncidentSummary {
 export interface Health {
   status: string;
   version: string;
-  demo_mode: boolean;
+  slack: { configured: boolean };
   auto_open_pr: boolean;
   cerebras: { configured: boolean; model: string };
   github: { configured: boolean; oauth_configured: boolean; repo: string };

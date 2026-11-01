@@ -14,9 +14,6 @@ const AGENTS: { name: string; icon: React.ElementType; question: string }[] = [
 
 const CODE_AGENT: (typeof AGENTS)[number] = { name: 'Code Agent', icon: Code2, question: 'What does the code in the repository say, and what is the fix?' };
 
-const depTone = { HEALTHY: 'ok', DEGRADED: 'warn', DOWN: 'bad' } as const;
-const depLabel = { HEALTHY: 'Healthy', DEGRADED: 'Slow', DOWN: 'Down' } as const;
-
 const AgentRow: React.FC<{
   meta: (typeof AGENTS)[number];
   run: AgentRun | undefined;
@@ -94,7 +91,8 @@ export const InvestigationView: React.FC<{ detail: IncidentDetail | null }> = ({
   const runs = new Map(detail.agents.map((a) => [a.name, a]));
   const roster = runs.has(CODE_AGENT.name) ? [...AGENTS, CODE_AGENT] : AGENTS;
   const finished = roster.filter((a) => runs.has(a.name)).length;
-  const services = detail.infra?.services ?? [];
+  const infraSummary = runs.get('Infra Checker')?.summary;
+  const dependencies = Object.entries(detail.infra?.dependencies ?? {});
   const routes = detail.impact?.affected_routes ?? [];
 
   return (
@@ -120,39 +118,44 @@ export const InvestigationView: React.FC<{ detail: IncidentDetail | null }> = ({
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="card">
           <CardHeader
-            title="Outside services"
-            hint={
-              detail.infra?.services_simulated
-                ? 'Used to rule out a problem outside our code. The status values are placeholders until real health checks exist.'
-                : 'Checked to rule out a problem that is not in our code.'
-            }
+            title="Our code or an outside service?"
+            hint="Decided from the error text, the stack trace and the source code."
             right={
               detail.infra ? (
                 <Badge tone={detail.infra.is_external ? 'warn' : 'ok'}>
-                  {detail.infra.is_external ? 'Outside problem' : 'Our code'}
+                  {detail.infra.is_external ? 'Outside service' : 'Our code'}
                 </Badge>
               ) : undefined
             }
           />
-          {services.length === 0 ? (
+          {!detail.infra ? (
             <p className="px-5 py-4 text-sm text-muted">Waiting for the Infra Checker.</p>
           ) : (
-            <ul className="divide-y divide-line">
-              {services.map((s) => (
-                <li key={s.service} className="flex items-center justify-between gap-3 px-5 py-3">
-                  <span className="min-w-0 truncate text-sm">{s.service}</span>
-                  <span className="flex shrink-0 items-center gap-3">
-                    <span className="tabular text-xs text-muted">{s.latencyMs} ms</span>
-                    <Badge tone={depTone[s.status]}>{depLabel[s.status]}</Badge>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <div className="space-y-4 p-5">
+              <p className="text-sm">{infraSummary}</p>
+              {detail.infra.suspect_dependency && (
+                <p className="text-sm text-muted">
+                  Suspected service: <span className="font-mono text-ink">{detail.infra.suspect_dependency}</span>
+                </p>
+              )}
+              {dependencies.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-xs text-muted">Libraries this service depends on, from its requirements.txt</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {dependencies.map(([name, version]) => (
+                      <span key={name} className="rounded bg-sunken px-2 py-0.5 font-mono text-xs text-muted">
+                        {name} {version}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </section>
 
         <section className="card">
-          <CardHeader title="Affected requests" hint={detail.impact?.impact_percentage ?? 'Waiting for the Impact Analyst.'} />
+          <CardHeader title="Affected requests" hint={detail.impact?.recent_failures ?? 'Waiting for the Impact Analyst.'} />
           {routes.length === 0 ? (
             <p className="px-5 py-4 text-sm text-muted">No affected requests reported yet.</p>
           ) : (

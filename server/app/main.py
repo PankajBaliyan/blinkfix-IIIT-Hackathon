@@ -63,7 +63,6 @@ async def root():
         "docs_url": "/docs",
         "health_url": "/api/health",
         "endpoints": [
-            "POST /api/incidents/simulate",
             "POST /api/incidents/webhook/crash",
             "GET  /api/incidents/{incident_id}",
             "GET  /api/incidents/{incident_id}/stream (SSE)",
