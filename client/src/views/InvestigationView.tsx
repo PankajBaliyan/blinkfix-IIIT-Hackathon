@@ -58,7 +58,13 @@ const AgentRow: React.FC<{
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           {!run && working ? <CheckIcon state="running" /> : <Badge tone={tone}>{run ? 'Done' : 'Waiting'}</Badge>}
-          {run && <span className="tabular text-xs text-muted">{run.durationMs} ms</span>}
+          {run && (
+            <span className="tabular text-right text-xs text-muted" title={run.findings.source === 'cerebras' && run.findings.sharedCall ? 'The five agents share one model call' : undefined}>
+              {run.findings.source === 'cerebras'
+                ? `${run.findings.model}, ${run.findings.modelLatencyMs} ms${run.findings.sharedCall ? ' (shared call)' : ''}`
+                : 'Demo analysis'}
+            </span>
+          )}
         </div>
       </div>
     </li>
@@ -110,7 +116,11 @@ export const InvestigationView: React.FC<{ detail: IncidentDetail | null }> = ({
         <section className="card">
           <CardHeader
             title="Outside services"
-            hint="Checked to rule out a problem that is not in our code."
+            hint={
+              detail.infra?.services_simulated
+                ? 'Used to rule out a problem outside our code. The status values are placeholders until real health checks exist.'
+                : 'Checked to rule out a problem that is not in our code.'
+            }
             right={
               detail.infra ? (
                 <Badge tone={detail.infra.is_external ? 'warn' : 'ok'}>

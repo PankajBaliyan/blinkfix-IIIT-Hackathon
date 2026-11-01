@@ -1,7 +1,7 @@
 import ast
 import re
 import textwrap
-from typing import List
+from typing import Callable, List, Optional
 from ..models.schemas import CandidatePatch
 
 
@@ -42,11 +42,18 @@ def score_patch(patch: CandidatePatch) -> int:
     return min(score, 99)
 
 
-def rank_and_select_winner(patches: List[CandidatePatch], language: str = "javascript") -> List[CandidatePatch]:
-    """Runs validation gates on candidate patches and designates the highest scoring winner."""
+def rank_and_select_winner(
+    patches: List[CandidatePatch],
+    language: str = "javascript",
+    syntax_check: Optional[Callable[[CandidatePatch], bool]] = None,
+) -> List[CandidatePatch]:
+    """Runs validation gates on candidate patches and designates the highest scoring winner.
+
+    `syntax_check` can check a patch in the context of the whole file. Without it only the snippet is checked.
+    """
     validate = validate_python_syntax if language == "python" else validate_javascript_syntax
     for patch in patches:
-        patch.validation.astSyntaxValid = validate(patch.code)
+        patch.validation.astSyntaxValid = syntax_check(patch) if syntax_check else validate(patch.code)
         patch.validation.score = score_patch(patch)
 
     # Sort descending by score

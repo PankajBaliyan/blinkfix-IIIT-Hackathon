@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, X, Loader2 } from 'lucide-react';
+import { Check, X, Loader2, Minus } from 'lucide-react';
 import { IncidentStatus } from '../types';
 
 export type Tone = 'neutral' | 'accent' | 'ok' | 'warn' | 'bad';
@@ -64,9 +64,16 @@ export const Fact: React.FC<{ label: string; children: React.ReactNode; mono?: b
 );
 
 /** A pass / fail / running glyph for checks. */
-export const CheckIcon: React.FC<{ state: 'pass' | 'fail' | 'running' }> = ({ state }) => {
+export const CheckIcon: React.FC<{ state: 'pass' | 'fail' | 'running' | 'skipped' }> = ({ state }) => {
   if (state === 'running') {
     return <Loader2 size={16} className="animate-spin text-accent motion-reduce:animate-none" aria-label="Running" />;
+  }
+  if (state === 'skipped') {
+    return (
+      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sunken text-faint" aria-label="Not run">
+        <Minus size={13} strokeWidth={3} />
+      </span>
+    );
   }
   return state === 'pass' ? (
     <span className="flex h-5 w-5 items-center justify-center rounded-full bg-ok-soft text-ok" aria-label="Passed">
@@ -105,9 +112,9 @@ export function statusInfo(status: IncidentStatus): { label: string; tone: Tone;
     case 'SPECULATIVE_REPAIR':
       return { label: 'Building fixes', tone: 'accent', detail: 'Writing several different candidate fixes.' };
     case 'VALIDATING':
-      return { label: 'Testing fixes', tone: 'accent', detail: 'Checking each fix and picking the safest one.' };
+      return { label: 'Checking fixes', tone: 'accent', detail: 'Checking that each fix is valid code and picking the best one.' };
     case 'RESOLVED':
-      return { label: 'Fix ready for review', tone: 'ok', detail: 'A tested fix is open as a draft pull request.' };
+      return { label: 'Fix ready for review', tone: 'ok', detail: 'A fix has been proposed as a draft pull request, ready for review.' };
     case 'FAILED':
       return { label: 'Needs attention', tone: 'bad', detail: 'No automatic fix passed the checks. An engineer should take over.' };
   }

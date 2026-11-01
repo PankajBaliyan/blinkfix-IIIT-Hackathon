@@ -1,13 +1,21 @@
 """Candidate fixes for a crash.
 
-Demo mode: fixes come from a small library keyed by exception type. Each one
-replaces the failing line. When a Cerebras key is configured these are meant to
-be produced by the model instead.
+With a Cerebras key, the model writes five fixes that each replace the failing line.
+Without one, or if the model's answer is unusable, a small library keyed by exception
+type is used instead.
 """
-from typing import Dict, List, Optional, Tuple
+import logging
+import re
+import textwrap
+from typing import Any, Dict, List, Optional, Tuple
 
+from ..agents.base import SYSTEM_PROMPT
 from ..models.schemas import CandidatePatch, CrashPayload, PatchValidation
+from .cerebras_service import cerebras_client
+from .evidence import Evidence
 from .source_reader import read_failing_line
+
+logger = logging.getLogger("blinkfix.patches")
 
 # (id, strategy, explanation, confidence, tests, code)
 Spec = Tuple[str, str, str, float, str, str]
@@ -75,16 +83,91 @@ def _specs_for(payload: CrashPayload, failing_line: Optional[str]) -> List[Spec]
     return []
 
 
-def build_candidate_patches(payload: CrashPayload) -> List[CandidatePatch]:
-    failing_line = read_failing_line(payload.file, payload.line)
-    indent = ""
-    if failing_line:
-        indent = failing_line[: len(failing_line) - len(failing_line.lstrip())]
+PATCH_TASK = (
+    "Write 5 different fixes for the failing line marked >> in <source>. Use 5 genuinely different strategies, "
+    "for example: a default value, a guard clause with an early return, the smallest possible edit, "
+    "a defensive fallback, and a clear error for the caller.\n"
+    'Return JSON: {"patches": [{"strategy": string, "explanation": string, "confidence": number between 0 and 1, "code": string}]}\n'
+    "Rules for code:\n"
+    "- It replaces ONLY the failing line. Do not repeat or change any other line.\n"
+    "- Keep the same indentation as the failing line. It may span several lines.\n"
+    "- Use only names that appear in <source> or <imports>. Do not add imports.\n"
+    "- No Markdown, no comments about the change, only code.\n"
+    "strategy: 2 to 4 words. explanation: one sentence. confidence: your honest estimate that the fix is correct and safe."
+)
 
+MAX_PATCH_LINES = 12
+
+
+def _indent_of(line: str) -> str:
+    return line[: len(line) - len(line.lstrip())]
+
+
+def _clean_code(raw: Any, indent: str) -> Optional[str]:
+    """Removes any Markdown fence, fixes the indentation to match the failing line, and rejects empty code."""
+    if not isinstance(raw, str):
+        return None
+    text = re.sub(r"^```[a-zA-Z]*\n?|\n?```$", "", raw.strip("\n"))
+    if not text.strip():
+        return None
+    lines = textwrap.dedent(text).splitlines()
+    if len(lines) > MAX_PATCH_LINES:
+        return None
+    return _indent("\n".join(lines), indent)
+
+
+def _patches_from_model(data: Dict[str, Any], failing_line: str, model: str) -> List[CandidatePatch]:
+    items = data.get("patches")
+    if not isinstance(items, list):
+        return []
+    indent = _indent_of(failing_line)
+    seen = {failing_line.strip()}
+    patches: List[CandidatePatch] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        code = _clean_code(item.get("code"), indent)
+        strategy = item.get("strategy")
+        if not code or not isinstance(strategy, str) or not strategy.strip():
+            continue
+        # Skip a patch that changes nothing or repeats an earlier one.
+        key = "\n".join(l.strip() for l in code.splitlines())
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            confidence = max(0.0, min(1.0, float(item.get("confidence", 0.5))))
+        except (TypeError, ValueError):
+            confidence = 0.5
+        pid = f"patch-{chr(ord('a') + len(patches))}"
+        explanation = item.get("explanation") if isinstance(item.get("explanation"), str) else ""
+        patches.append(CandidatePatch(
+            id=pid,
+            title=f"Patch {pid[-1].upper()}: {strategy.strip()[:60]}",
+            strategy=strategy.strip()[:60],
+            explanation=explanation.strip()[:240],
+            confidence=confidence,
+            validation=PatchValidation(
+                targetFileMatch=True,
+                astSyntaxValid=True,
+                unitTestsPassed="not run",
+                diffLineChange=f"+{len(code.splitlines())} / -1 lines",
+                score=0,
+            ),
+            code=code,
+            source="cerebras",
+            model=model,
+        ))
+        if len(patches) == 5:
+            break
+    return patches
+
+
+def _library_patches(payload: CrashPayload, failing_line: Optional[str]) -> List[CandidatePatch]:
+    indent = _indent_of(failing_line) if failing_line else ""
     patches = []
     for pid, strategy, explanation, confidence, tests, code in _specs_for(payload, failing_line):
         replacement = _indent(code, indent)
-        added = len(replacement.splitlines())
         patches.append(CandidatePatch(
             id=pid,
             title=f"Patch {pid[-1].upper()}: {strategy}",
@@ -95,9 +178,32 @@ def build_candidate_patches(payload: CrashPayload) -> List[CandidatePatch]:
                 targetFileMatch=True,
                 astSyntaxValid=True,
                 unitTestsPassed=tests,
-                diffLineChange=f"+{added} / -1 lines",
+                diffLineChange=f"+{len(replacement.splitlines())} / -1 lines",
                 score=0,
             ),
             code=replacement,
+            source="demo",
         ))
     return patches
+
+
+async def build_candidate_patches(payload: CrashPayload, evidence: Evidence) -> List[CandidatePatch]:
+    failing_line = read_failing_line(payload.file, payload.line)
+
+    if failing_line and cerebras_client.enabled:
+        reply = await cerebras_client.complete_json(
+            f"{SYSTEM_PROMPT}\n\nYour role: Patch Writer. You write minimal, safe Python bug fixes.",
+            f"{evidence.render()}\n\nTask:\n{PATCH_TASK}",
+            temperature=0.3,
+            max_tokens=3000,
+        )
+        if reply.data is not None:
+            patches = _patches_from_model(reply.data, failing_line, reply.model)
+            if patches:
+                logger.info("%s wrote %d candidate fixes in %d ms", reply.model, len(patches), reply.latency_ms)
+                return patches
+            logger.warning("Model answer held no usable patches; using the built-in library")
+        else:
+            logger.warning("Model call failed (%s); using the built-in library", reply.error)
+
+    return _library_patches(payload, failing_line)

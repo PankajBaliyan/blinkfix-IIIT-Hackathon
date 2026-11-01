@@ -77,6 +77,8 @@ def init_db() -> None:
                 "explanation": "TEXT",
                 "confidence": "REAL DEFAULT 0",
                 "validation_json": "TEXT",
+                "source": "TEXT",
+                "model": "TEXT",
             })
         logger.info(f"SQLite database initialized at {settings.DATABASE_PATH}")
     finally:
@@ -185,8 +187,8 @@ def save_patches(incident_id: str, patches: List[Dict[str, Any]]) -> None:
                     """
                     INSERT INTO candidate_patches (
                         incident_id, patch_id, strategy, code, is_winner, validation_score,
-                        title, explanation, confidence, validation_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        title, explanation, confidence, validation_json, source, model
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         incident_id,
@@ -199,6 +201,8 @@ def save_patches(incident_id: str, patches: List[Dict[str, Any]]) -> None:
                         p.get("explanation"),
                         p.get("confidence", 0),
                         json.dumps(p.get("validation", {})),
+                        p.get("source", "demo"),
+                        p.get("model"),
                     ),
                 )
     finally:
@@ -220,6 +224,8 @@ def get_patches(incident_id: str) -> List[Dict[str, Any]]:
                 "isWinner": bool(r["is_winner"]),
                 "validation": json.loads(r["validation_json"]) if r["validation_json"] else {},
                 "code": r["code"],
+                "source": r["source"] or "demo",
+                "model": r["model"],
             }
             for r in rows
         ]

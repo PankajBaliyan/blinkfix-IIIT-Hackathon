@@ -22,7 +22,14 @@ class Settings:
 
     # Cerebras Cloud API
     CEREBRAS_API_KEY: str = os.getenv("CEREBRAS_API_KEY", "")
-    CEREBRAS_MODEL: str = os.getenv("CEREBRAS_MODEL", "llama3.3-70b")
+    CEREBRAS_MODEL: str = os.getenv("CEREBRAS_MODEL", "gpt-oss-120b")
+    CEREBRAS_REASONING_EFFORT: str = os.getenv("CEREBRAS_REASONING_EFFORT", "low")
+    # Requests per minute the key allows, and the longest a call may wait for a free slot before
+    # the app gives up and uses its built-in analysis instead.
+    CEREBRAS_MAX_RPM: int = int(os.getenv("CEREBRAS_MAX_RPM", "5"))
+    CEREBRAS_MAX_WAIT_S: float = float(os.getenv("CEREBRAS_MAX_WAIT_S", "10"))
+    # "batched": the five agents share one model call. "parallel": one call per agent (needs a higher rate limit).
+    CEREBRAS_AGENT_MODE: str = os.getenv("CEREBRAS_AGENT_MODE", "batched")
     CEREBRAS_API_BASE: str = os.getenv("CEREBRAS_API_BASE", "https://api.cerebras.ai/v1")
 
     # GitHub API

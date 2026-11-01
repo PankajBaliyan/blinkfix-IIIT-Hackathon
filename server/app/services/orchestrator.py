@@ -1,15 +1,21 @@
+import ast
 import asyncio
 import time
 import logging
 from typing import Any, Dict, List, Optional
-from ..models.schemas import CrashPayload
+from ..models.schemas import CandidatePatch, CrashPayload
 from ..agents.trace_analyst import TraceAnalyst
 from ..agents.git_detective import GitDetective
 from ..agents.infra_checker import InfraChecker
 from ..agents.impact_analyst import ImpactAnalyst
 from ..agents.mitigation_planner import MitigationPlanner
 from ..services.context_service import load_deployment_context
+from ..config import settings
+from ..services.cerebras_service import cerebras_client
+from ..services.evidence import Evidence
+from ..services.triage import run_shared_triage
 from ..services.patch_generator import build_candidate_patches
+from ..services.source_reader import apply_patch, read_import_lines, read_source_snippet
 from ..services.patch_validator import rank_and_select_winner
 from ..services.github_service import create_draft_pull_request
 from ..services.slack_service import send_slack_incident_alert
@@ -18,6 +24,18 @@ from ..services.incident_events import publish_incident_update
 from ..database import save_incident, update_incident, save_agent_run, save_patches
 
 logger = logging.getLogger("blinkfix.orchestrator")
+
+
+def _file_parses_with(payload: CrashPayload, patch: CandidatePatch) -> bool:
+    """True if the real source file still parses after the failing line is replaced by the patch."""
+    patched = apply_patch(payload.file, payload.line, patch.code)
+    if patched is None:
+        return False
+    try:
+        ast.parse(patched)
+        return True
+    except SyntaxError:
+        return False
 
 
 async def run_incident_orchestration(
@@ -62,7 +80,14 @@ async def _orchestrate(incident_id: str, payload: CrashPayload, logs: List[Dict[
         "timestamp": time.time(),
     })
 
-    # 2. Parallel burst of 5 specialist agents
+    # 2. Parallel burst of 5 specialist agents, all reading the same evidence
+    evidence = Evidence(
+        payload=payload,
+        context=context,
+        logs=logs,
+        source=read_source_snippet(payload.file, payload.line, context=15),
+        imports=read_import_lines(payload.file),
+    )
     agents = [
         TraceAnalyst(),
         GitDetective(),
@@ -74,7 +99,10 @@ async def _orchestrate(incident_id: str, payload: CrashPayload, logs: List[Dict[
     for agent in agents:
         await event_bus.broadcast(incident_id, "agent_started", {"agent": agent.name})
 
-    agent_results = await asyncio.gather(*(agent.execute(payload, context) for agent in agents), return_exceptions=True)
+    if settings.CEREBRAS_AGENT_MODE == "batched" and cerebras_client.enabled:
+        evidence.shared = await run_shared_triage(agents, evidence)
+
+    agent_results = await asyncio.gather(*(agent.execute(payload, context, evidence) for agent in agents), return_exceptions=True)
 
     culprit_commit = "unknown"
     mitigation: Dict[str, Any] = {}
@@ -98,8 +126,7 @@ async def _orchestrate(incident_id: str, payload: CrashPayload, logs: List[Dict[
     })
 
     # 3. Speculative multi-patching: several candidate fixes at once
-    await asyncio.sleep(0.25)
-    candidates = build_candidate_patches(payload)
+    candidates = await build_candidate_patches(payload, evidence)
     update_incident(incident_id, {"status": "SPECULATIVE_REPAIR"})
     save_patches(incident_id, [p.model_dump() for p in candidates])
     await publish_incident_update(incident_id)
@@ -116,14 +143,25 @@ async def _orchestrate(incident_id: str, payload: CrashPayload, logs: List[Dict[
         return
 
     # 4. Validation gates and ranking
-    await asyncio.sleep(0.35)
     update_incident(incident_id, {"status": "VALIDATING"})
     await publish_incident_update(incident_id)
     language = "python" if payload.file.endswith(".py") else "javascript"
-    validated_patches = rank_and_select_winner(candidates, language=language)
+    validated_patches = rank_and_select_winner(
+        candidates,
+        language=language,
+        syntax_check=(lambda patch: _file_parses_with(payload, patch)) if language == "python" else None,
+    )
     winning_patch = next((p for p in validated_patches if p.isWinner), validated_patches[0])
     save_patches(incident_id, [p.model_dump() for p in validated_patches])
     await publish_incident_update(incident_id)
+
+    if not winning_patch.validation.astSyntaxValid:
+        # Never open a pull request for code that does not even parse.
+        logger.warning("No candidate fix for %s produced valid code", incident_id)
+        update_incident(incident_id, {"status": "FAILED"})
+        await event_bus.broadcast(incident_id, "incident_failed", {"incident_id": incident_id, "error": "No valid fix"})
+        await publish_incident_update(incident_id)
+        return
 
     await event_bus.broadcast(incident_id, "patch_verified", {
         "winning_patch_id": winning_patch.id,

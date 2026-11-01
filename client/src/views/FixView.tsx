@@ -6,12 +6,14 @@ import { CodeBlock, DiffView } from '../components/DiffView';
 
 const letter = (p: CandidatePatch) => p.id.replace('patch-', '').toUpperCase();
 
+const testsRun = (s: string) => /\d+\s*\/\s*\d+/.test(s);
+
 const testsPass = (s: string) => {
   const m = s.match(/(\d+)\s*\/\s*(\d+)/);
   return m ? m[1] === m[2] : false;
 };
 
-const SUBTITLE = 'Several candidate fixes are written and tested. The safest one becomes a pull request.';
+const SUBTITLE = 'Several candidate fixes are written and checked. The best one becomes a pull request.';
 
 export const FixView: React.FC<{ detail: IncidentDetail | null }> = ({ detail }) => {
   // Reset by the parent via `key={incident id}`, so a pick never leaks between incidents.
@@ -54,11 +56,14 @@ export const FixView: React.FC<{ detail: IncidentDetail | null }> = ({ detail })
   const failingLine = detail.source ? detail.source.lines[detail.source.failingLine - detail.source.startLine] : null;
   const prNumber = detail.prUrl?.match(/\/pull\/(\d+)/)?.[1];
   const checkState = (ok: boolean) => (resolved ? (ok ? 'pass' : 'fail') : 'running') as 'pass' | 'fail' | 'running';
+  const testsState = testsRun(selected.validation.unitTestsPassed)
+    ? checkState(testsPass(selected.validation.unitTestsPassed))
+    : (resolved ? 'skipped' : 'running') as 'skipped' | 'running';
 
   const checks = [
     { label: 'Changes the right file', detail: detail.error.file.split('/').pop() ?? '', state: checkState(selected.validation.targetFileMatch) },
-    { label: 'Code is valid', detail: 'It parses without errors', state: checkState(selected.validation.astSyntaxValid) },
-    { label: 'Tests pass', detail: selected.validation.unitTestsPassed, state: checkState(testsPass(selected.validation.unitTestsPassed)) },
+    { label: 'File still parses with the fix', detail: 'Checked on the real file', state: checkState(selected.validation.astSyntaxValid) },
+    { label: 'Tests pass', detail: testsRun(selected.validation.unitTestsPassed) ? selected.validation.unitTestsPassed : 'Not run yet', state: testsState },
     { label: 'Change is small', detail: selected.validation.diffLineChange, state: checkState(true) },
   ];
 
@@ -67,7 +72,7 @@ export const FixView: React.FC<{ detail: IncidentDetail | null }> = ({ detail })
       <PageTitle
         title="Fix"
         subtitle={SUBTITLE}
-        right={<Badge tone={resolved ? 'ok' : 'accent'}>{resolved ? 'Testing complete' : 'Testing in progress'}</Badge>}
+        right={<Badge tone={resolved ? 'ok' : 'accent'}>{resolved ? 'Checks complete' : 'Checking'}</Badge>}
       />
 
       <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
@@ -110,7 +115,14 @@ export const FixView: React.FC<{ detail: IncidentDetail | null }> = ({ detail })
             <CardHeader
               title={`Candidate ${letter(selected)}: ${selected.strategy}`}
               hint={selected.explanation}
-              right={resolved && selected.isWinner ? <Badge tone="ok">Best fix</Badge> : undefined}
+              right={
+                <div className="flex flex-wrap justify-end gap-1.5">
+                  <Badge tone={selected.source === 'cerebras' ? 'accent' : 'neutral'}>
+                    {selected.source === 'cerebras' ? `Written by ${selected.model}` : 'Demo library'}
+                  </Badge>
+                  {resolved && selected.isWinner && <Badge tone="ok">Best fix</Badge>}
+                </div>
+              }
             />
             <div className="space-y-5 p-5">
               {failingLine !== null && (
@@ -136,9 +148,10 @@ export const FixView: React.FC<{ detail: IncidentDetail | null }> = ({ detail })
                 </ul>
                 {resolved && (
                   <p className="mt-3 text-sm text-muted">
-                    Safety score <span className="font-semibold text-ink">{selected.validation.score}</span> out of 100, confidence{' '}
-                    <span className="font-semibold text-ink">{Math.round(selected.confidence * 100)}%</span>.
-                    {detail.demoMode && ' Test results are simulated in demo mode.'}
+                    Score <span className="font-semibold text-ink">{selected.validation.score}</span> out of 100.{' '}
+                    {selected.source === 'cerebras'
+                      ? <>The model rated its own confidence at <span className="font-semibold text-ink">{Math.round(selected.confidence * 100)}%</span>. Tests have not been run, so check the fix before merging.</>
+                      : 'These fixes and their test results come from the built-in demo library.'}
                   </p>
                 )}
               </div>
@@ -171,7 +184,7 @@ export const FixView: React.FC<{ detail: IncidentDetail | null }> = ({ detail })
                     <p className="text-sm font-semibold">Slack message</p>
                     <p className="mt-1 text-sm text-muted">
                       {detail.error.type} in {detail.service}
-                      {detail.culprit ? `. Introduced by PR #${detail.culprit.pr_number} from ${detail.culprit.author}` : ''}. A tested fix is ready for review.
+                      {detail.culprit ? `. Introduced by PR #${detail.culprit.pr_number} from ${detail.culprit.author}` : ''}. A proposed fix is ready for review.
                     </p>
                   </div>
                   {detail.demoMode && <Badge tone="neutral">Simulated</Badge>}

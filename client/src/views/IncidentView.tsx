@@ -74,7 +74,7 @@ export const IncidentView: React.FC<IncidentViewProps> = ({
   if (!detail) {
     return (
       <div className="space-y-6">
-        <PageTitle title="Incident" subtitle="Live crashes from your service, from first alert to a tested fix." right={picker || undefined} />
+        <PageTitle title="Incident" subtitle="Live crashes from your service, from first alert to a proposed fix." right={picker || undefined} />
         {offline}
         {!loaded && <p className="text-sm text-muted">Loading incidents…</p>}
         {loaded && online && list.length === 0 && (
@@ -112,7 +112,7 @@ export const IncidentView: React.FC<IncidentViewProps> = ({
     <div className="space-y-6">
       <PageTitle
         title="Incident"
-        subtitle="Live crashes from your service, from first alert to a tested fix."
+        subtitle="Live crashes from your service, from first alert to a proposed fix."
         right={picker || undefined}
       />
       {offline}
@@ -140,7 +140,7 @@ export const IncidentView: React.FC<IncidentViewProps> = ({
               </div>
             )}
             <p className="mt-1 text-xs text-muted">
-              {active ? 'Investigation in progress' : failed ? 'Needs an engineer' : 'From crash to a tested fix'}
+              {active ? 'Investigation in progress' : failed ? 'Needs an engineer' : 'From crash to a proposed fix'}
             </p>
           </div>
         </div>
@@ -269,7 +269,7 @@ export const IncidentView: React.FC<IncidentViewProps> = ({
               <GitPullRequest size={18} className="mt-0.5 shrink-0 text-accent" />
               <div className="min-w-0">
                 <p className="text-sm font-semibold">Draft pull request{prNumber ? ` #${prNumber}` : ''}</p>
-                <p className="mt-0.5 text-sm text-muted">Opened with the best of {detail.patches.length} tested fixes.</p>
+                <p className="mt-0.5 text-sm text-muted">Opened with the best-scoring of {detail.patches.length} candidate fixes.</p>
               </div>
             </div>
             <div className="flex gap-3">
@@ -281,7 +281,7 @@ export const IncidentView: React.FC<IncidentViewProps> = ({
             </div>
             <div>
               <p className="tabular text-sm font-semibold">{seconds(detail.durationMs)}</p>
-              <p className="mt-0.5 text-sm text-muted">From crash to a tested fix, finished at {clockTime(detail.createdAt)}.</p>
+              <p className="mt-0.5 text-sm text-muted">From crash to a proposed fix, finished at {clockTime(detail.createdAt)}.</p>
             </div>
           </div>
           <div className="border-t border-line px-5 py-3.5">

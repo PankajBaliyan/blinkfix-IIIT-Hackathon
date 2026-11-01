@@ -43,7 +43,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ list, loaded, onOpen }
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-3">
-            <Stat value={resolved.length ? seconds(avgMs) : 'None yet'} label="Average time to a tested fix" />
+            <Stat value={resolved.length ? seconds(avgMs) : 'None yet'} label="Average time to a proposed fix" />
             <Stat value={`${resolved.length} of ${list.length}`} label="Incidents with a fix ready" />
             <Stat value={String(list.length)} label="Incidents recorded" />
           </div>

@@ -45,6 +45,8 @@ class CandidatePatch(BaseModel):
     isWinner: bool = False
     validation: PatchValidation = Field(default_factory=PatchValidation)
     code: str
+    source: str = "demo"
+    model: Optional[str] = None
 
 class RollbackApprovalRequest(BaseModel):
     approvedBy: str = "sre-engineer"

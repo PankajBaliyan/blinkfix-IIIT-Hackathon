@@ -51,6 +51,9 @@ export interface CandidatePatch {
   isWinner: boolean;
   validation: PatchValidation;
   code: string;
+  /** Who wrote it: the AI model, or the built-in demo library. */
+  source: 'cerebras' | 'demo';
+  model: string | null;
 }
 
 export interface LogLine {
@@ -109,6 +112,7 @@ export interface IncidentDetail extends IncidentSummary {
     diagnosis: string;
     is_external: boolean;
     services: OutsideService[];
+    services_simulated?: boolean;
   } | null;
   mitigation: {
     action: string;

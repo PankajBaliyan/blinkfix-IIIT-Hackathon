@@ -21,18 +21,18 @@ Still simulated:
 
 A. REAL AI (biggest gap)
 ------------------------
-[ ] A1. Call Cerebras from the 5 agents
+[x] A1. Call Cerebras from the 5 agents  (DONE: see notes at the bottom)
         Each agent builds a prompt from the crash, logs, source and commit data,
         calls the model and returns the parsed JSON. Keep the canned answers as
         the fallback when no API key is set.
-[ ] A2. Generate candidate patches with the model
+[x] A2. Generate candidate patches with the model  (DONE)
         Replace the fixed patch library. Send the failing function and ask for
         5 different strategies, each returning a replacement for the failing lines.
 [ ] A3. Use Codex (or another coding model) to review the winning patch
         A second opinion that looks for side effects and missed edge cases
         before the pull request is opened.
 [ ] A4. Have the model write the pull request description and Slack summary
-[ ] A5. Show which model produced each result in the UI (name and response time)
+[x] A5. Show which model produced each result in the UI (name and response time)  (DONE)
 
 
 B. REAL VALIDATION OF PATCHES
@@ -129,11 +129,43 @@ H. HOUSEKEEPING
 [ ] H4. Fix the Python and Node versions the project targets and document them
 
 
+NEW ITEMS FROM THE CEREBRAS WORK
+--------------------------------
+[ ] B5. Do not trust the model's own confidence to pick the winner
+        In a real run, a patch that still crashes ((currency or {})["exchange_rate"]
+        raises KeyError) scored the same as the good ones. B1 + B3 (apply the patch,
+        replay the crashing request) are now the most important missing piece.
+[ ] A6. Make the Timeout demo bug a real upstream failure
+        The demo raises TimeoutError itself, so the model correctly says "our code".
+        Make it call a real unreachable host so the traceback comes from the HTTP
+        client and the Infra Checker has a true outside failure to find.
+[ ] A7. Cache or skip model calls for repeated identical crashes (ties to D2)
+        The key allows 5 requests/minute, 150/hour, 2400/day. Each incident uses 2.
+[ ] A8. Parallel agents mode needs a higher rate limit
+        CEREBRAS_AGENT_MODE=parallel (one call per agent) works but needs 6 calls per
+        incident, so it only makes sense with a key that allows more than 5 per minute.
+[ ] E8. Update README: the model is gpt-oss-120b now (llama3.3-70b is not available
+        to our key), plus the rate-limit behaviour.
+
+
+NOTES ON A1/A2 (what exists now)
+--------------------------------
+- Model: gpt-oss-120b (set in server/.env). qwen-3.8-27b is also available to the key.
+- Per incident: 1 shared "triage" call answering all 5 agent roles, + 1 patch call.
+- Each agent checks its section of the answer; if it is missing or invalid the agent
+  falls back to its built-in demo analysis and says so in its activity log.
+- A client-side limiter keeps calls under CEREBRAS_MAX_RPM. If the next free slot is
+  further than CEREBRAS_MAX_WAIT_S away, the call is skipped and the built-in
+  analysis / patch library is used.
+- Patches are checked by applying them to the real file and parsing the result.
+  Tests are NOT run ("not run" in the UI) until B2/B3 are built.
+
+
 SUGGESTED ORDER
 ---------------
 1. F1  (see what we built, fix what looks wrong)
 2. A1 + A2  (makes the whole thing real; biggest demo impact)
-3. B1 + B3  (real proof that a fix works)
+3. B1 + B3 + B5  (real proof that a fix works - now the most important gap)
 4. C1 + C2  (real pull request and Slack message)
 5. E1 + F2  (live updates)
 6. G1, G2, G5  (demo prep)
