@@ -57,7 +57,7 @@ def convert_to_cents(cart: CheckoutRequest) -> int:
 
 def average_item_price(items: list) -> float:
     # BUG: an order with no items divides by zero.
-    return sum(i["price"] for i in items) / len(items)
+    return sum(i["price"] for i in items) / (len(items) or 1)
 
 
 async def call_stripe(amount: float) -> dict:
