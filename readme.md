@@ -13,6 +13,9 @@
 
 ---
 
+
+
+
 ## 📌 Executive Summary
 
 Modern cloud production outages cost organizations upwards of **\$10,000 per minute**. Traditional Mean Time to Resolution (MTTR) is measured in hours or days—dominated by alert fatigue, context switching, manual log analysis, `git blame` spelunking, and frantic firefighting.
