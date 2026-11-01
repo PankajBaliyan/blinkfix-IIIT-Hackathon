@@ -2,6 +2,7 @@ import asyncio
 from typing import Dict, Any, List
 from .base import BaseAgent
 from ..models.schemas import CrashPayload
+from ..services.diagnosis import find_culprit_commit
 
 class GitDetective(BaseAgent):
     name = "Git Detective"
@@ -13,13 +14,7 @@ class GitDetective(BaseAgent):
         logs.append("[00:00.120] Querying commit history diff from deployment context.")
         await asyncio.sleep(0.39)
 
-        recent_commits = context.get("recentCommits", [])
-        culprit = recent_commits[0] if recent_commits else {
-            "hash": "abc104",
-            "author": "alex@company.com",
-            "message": "Refactor payment processing currency conversion",
-            "prNumber": 104,
-        }
+        culprit = find_culprit_commit(context, payload.file)
 
         logs.append(f"[00:00.340] Diff matched commit {culprit['hash']} modifying {payload.file}.")
         logs.append(f"[00:00.400] Culprit identified: PR #{culprit.get('prNumber', 104)} by {culprit.get('author')}.")
@@ -30,6 +25,8 @@ class GitDetective(BaseAgent):
                 "commit_hash": culprit["hash"],
                 "author": culprit.get("author"),
                 "pr_number": culprit.get("prNumber", 104),
+                "message": culprit.get("message"),
+                "committed_at": culprit.get("timestamp"),
                 "confidence": 0.98,
             },
         }

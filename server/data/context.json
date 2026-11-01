@@ -12,8 +12,11 @@
       "hash": "abc104",
       "author": "alex@company.com",
       "timestamp": "2026-10-31T09:45:00Z",
-      "message": "Refactor payment processing currency conversion",
-      "changedFiles": ["src/payments.js"],
+      "message": "Refactor checkout service: currency lookup, order totals and Stripe handling",
+      "changedFiles": [
+        "app/demo_service/checkout.py",
+        "src/payments.js"
+      ],
       "prNumber": 104
     },
     {
@@ -21,7 +24,9 @@
       "author": "sam@company.com",
       "timestamp": "2026-10-30T16:20:00Z",
       "message": "Update Stripe SDK version to 12.4.0",
-      "changedFiles": ["package.json"],
+      "changedFiles": [
+        "package.json"
+      ],
       "prNumber": 103
     },
     {
@@ -29,7 +34,9 @@
       "author": "jordan@company.com",
       "timestamp": "2026-10-30T11:10:00Z",
       "message": "Add telemetry middleware for checkout metrics",
-      "changedFiles": ["src/middleware/telemetry.js"],
+      "changedFiles": [
+        "src/middleware/telemetry.js"
+      ],
       "prNumber": 102
     },
     {
@@ -37,7 +44,9 @@
       "author": "pat@company.com",
       "timestamp": "2026-10-29T18:05:00Z",
       "message": "Migrate database pool connection retry limit",
-      "changedFiles": ["src/db/pool.js"],
+      "changedFiles": [
+        "src/db/pool.js"
+      ],
       "prNumber": 101
     },
     {
@@ -45,7 +54,10 @@
       "author": "alex@company.com",
       "timestamp": "2026-10-29T09:15:00Z",
       "message": "Initial payment intent handler scaffolding",
-      "changedFiles": ["src/payments.js", "src/auth.js"],
+      "changedFiles": [
+        "src/payments.js",
+        "src/auth.js"
+      ],
       "prNumber": 100
     }
   ],
@@ -61,4 +73,3 @@
     "src/auth.js": "function verifyToken(req, res, next) {\n  const token = req.headers.authorization;\n  if (!token) return res.status(401).json({ error: 'Unauthorized' });\n  next();\n}\n\nmodule.exports = { verifyToken };"
   }
 }
-

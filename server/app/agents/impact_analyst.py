@@ -2,6 +2,7 @@ import asyncio
 from typing import Dict, Any, List
 from .base import BaseAgent
 from ..models.schemas import CrashPayload
+from ..services.diagnosis import impact_profile
 
 class ImpactAnalyst(BaseAgent):
     name = "Impact Analyst"
@@ -13,20 +14,21 @@ class ImpactAnalyst(BaseAgent):
         logs.append("[00:00.120] Mapping topology dependency graph & route impact.")
         await asyncio.sleep(0.42)
 
-        affected_scope = "European Checkout Flow & Multi-Currency Carts"
-        traffic_pct = "14.2% of live traffic"
-        severity = "P0 - CRITICAL"
+        profile = impact_profile(payload)
+        scope = profile["scope"]
+        traffic = profile["impact_percentage"]
+        severity = profile["severity"]
 
-        logs.append(f"[00:00.380] Blast radius scoped to {affected_scope} ({traffic_pct}).")
+        logs.append(f"[00:00.380] Blast radius scoped to {scope} ({traffic}).")
         logs.append(f"[00:00.430] Assigned severity: {severity}.")
 
         return {
-            "summary": f"Blast radius: {affected_scope} ({traffic_pct}). Severity: {severity}.",
+            "summary": f"Blast radius: {scope} ({traffic}). Severity: {severity}.",
             "findings": {
-                "scope": affected_scope,
-                "impact_percentage": traffic_pct,
+                "scope": scope,
+                "impact_percentage": traffic,
                 "severity": severity,
+                "affected_routes": profile["affected_routes"],
                 "regression_risk": "HIGH",
             },
         }
-

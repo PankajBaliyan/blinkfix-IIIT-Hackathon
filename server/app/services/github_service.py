@@ -11,10 +11,11 @@ async def create_draft_pull_request(
     patch_code: str,
     summary: str,
     culprit_commit: Optional[str] = "abc104",
+    error_name: str = "error",
 ) -> Dict[str, Any]:
     """Creates a real GitHub branch, commits the fix, and opens a Draft Pull Request."""
     branch_name = f"swarm-zero/fix/{incident_id}"
-    pr_title = f"[Swarm Zero] Automated fix for TypeError in {target_file} (#{incident_id[-3:] if len(incident_id) >= 3 else '105'})"
+    pr_title = f"[Swarm Zero] Automated fix for {error_name} in {target_file} (#{incident_id[-3:] if len(incident_id) >= 3 else '105'})"
     pr_body = f"""## 🚨 Blinkfix // Swarm Zero Autonomous Incident Resolution
 **Incident ID:** `{incident_id}`  
 **Target Service:** `{settings.GITHUB_REPO}`  
@@ -27,7 +28,7 @@ async def create_draft_pull_request(
 - **Patch Verification:** Passed AST syntax validation & automated regression checks.
 
 ### 📝 Verified Patch Preview
-```javascript
+```{'python' if target_file.endswith('.py') else 'javascript'}
 {patch_code}
 ```
 *Generated & verified autonomously by Blinkfix Swarm Zero in <2.0s.*
@@ -79,7 +80,8 @@ async def create_draft_pull_request(
                 logger.warning(f"GitHub API error: {e}. Falling back to authentic mock PR.")
 
     # Return authentic deterministic PR payload
-    pr_number = 105
+    # Demo mode: a stable fake PR number per incident, so different incidents do not all share one.
+    pr_number = 100 + sum(ord(c) for c in incident_id) % 800
     pr_url = f"https://github.com/{settings.GITHUB_OWNER}/{settings.GITHUB_REPO}/pull/{pr_number}"
     return {
         "pr_number": pr_number,

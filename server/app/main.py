@@ -6,6 +6,8 @@ from .config import settings
 from .database import init_db
 from .services.cerebras_service import cerebras_client
 from .routes import incident, stream, health
+from .demo_service import checkout
+from .services.crash_detector import CrashDetectionMiddleware
 
 # Configure logging
 logging.basicConfig(
@@ -31,6 +33,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Added before CORS so it sits inside it and its error responses still get CORS headers.
+app.add_middleware(CrashDetectionMiddleware)
+
 # Configure CORS for frontend access
 app.add_middleware(
     CORSMiddleware,
@@ -44,6 +49,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(incident.router)
 app.include_router(stream.router)
+app.include_router(checkout.router)
 
 @app.get("/")
 async def root():
@@ -59,6 +65,9 @@ async def root():
             "GET  /api/incidents/{incident_id}/stream (SSE)",
             "POST /api/incidents/{incident_id}/rollback",
             "GET  /api/health",
+            "POST /api/demo/checkout (buggy: TypeError)",
+            "GET  /api/demo/orders/{order_id}/average-price (buggy: ZeroDivisionError)",
+            "POST /api/demo/payments/charge (buggy: TimeoutError)",
         ],
     }
 

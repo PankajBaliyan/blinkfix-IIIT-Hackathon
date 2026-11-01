@@ -95,7 +95,7 @@ export const EmptyState: React.FC<{
 export function statusInfo(status: IncidentStatus): { label: string; tone: Tone; detail: string } {
   switch (status) {
     case 'STANDBY':
-      return { label: 'No active incident', tone: 'neutral', detail: 'Everything is quiet. Start the demo to see Blinkfix respond.' };
+      return { label: 'No incidents yet', tone: 'neutral', detail: 'Blinkfix is watching the service. A crash will appear here as it happens.' };
     case 'TRIGGERED':
       return { label: 'Crash detected', tone: 'bad', detail: 'A crash report just arrived. Starting the investigation.' };
     case 'AGENTS_ACTIVE':
@@ -103,13 +103,13 @@ export function statusInfo(status: IncidentStatus): { label: string; tone: Tone;
     case 'MITIGATION_READY':
       return { label: 'Rollback ready', tone: 'warn', detail: 'A safe rollback is ready for your approval.' };
     case 'SPECULATIVE_REPAIR':
-      return { label: 'Building fixes', tone: 'accent', detail: 'Writing five different candidate fixes.' };
+      return { label: 'Building fixes', tone: 'accent', detail: 'Writing several different candidate fixes.' };
     case 'VALIDATING':
       return { label: 'Testing fixes', tone: 'accent', detail: 'Checking each fix and picking the safest one.' };
     case 'RESOLVED':
       return { label: 'Fix ready for review', tone: 'ok', detail: 'A tested fix is open as a draft pull request.' };
     case 'FAILED':
-      return { label: 'Needs attention', tone: 'bad', detail: 'The automatic fix did not pass. An engineer should take over.' };
+      return { label: 'Needs attention', tone: 'bad', detail: 'No automatic fix passed the checks. An engineer should take over.' };
   }
 }
 

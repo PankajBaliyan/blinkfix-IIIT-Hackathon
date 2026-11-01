@@ -1,0 +1,139 @@
+BLINKFIX // SWARM ZERO - TODO
+=============================
+
+How to use: pick an item by its ID (for example A1), tell me, and we implement it.
+Mark finished items by changing [ ] to [x].
+
+Where we are now
+----------------
+Working:
+  - Demo service with 3 deliberate bugs (TypeError, ZeroDivisionError, TimeoutError)
+  - Crash detection, webhook, log fetching and console report
+  - Incidents, agent results, patches and logs saved in SQLite
+  - API to list and read incidents
+  - Frontend with live polling, light/dark mode and a sidebar
+Still simulated:
+  - The 5 agents return canned text (Cerebras is never called)
+  - Candidate patches come from a fixed library for the 3 demo bugs
+  - Test results for patches are canned numbers
+  - GitHub pull request and Slack message are faked in demo mode
+
+
+A. REAL AI (biggest gap)
+------------------------
+[ ] A1. Call Cerebras from the 5 agents
+        Each agent builds a prompt from the crash, logs, source and commit data,
+        calls the model and returns the parsed JSON. Keep the canned answers as
+        the fallback when no API key is set.
+[ ] A2. Generate candidate patches with the model
+        Replace the fixed patch library. Send the failing function and ask for
+        5 different strategies, each returning a replacement for the failing lines.
+[ ] A3. Use Codex (or another coding model) to review the winning patch
+        A second opinion that looks for side effects and missed edge cases
+        before the pull request is opened.
+[ ] A4. Have the model write the pull request description and Slack summary
+[ ] A5. Show which model produced each result in the UI (name and response time)
+
+
+B. REAL VALIDATION OF PATCHES
+-----------------------------
+[ ] B1. Apply each patch to a temporary copy of the source file and run it
+        Check that the file still imports and the syntax is valid on the real file,
+        not just on the snippet.
+[ ] B2. Run real tests against each patch
+        Write a small test suite for the demo service (pytest) and run it per
+        candidate in isolation, then report real pass counts.
+[ ] B3. Replay the crashing request against the patched code
+        Prove the fix removes the original error.
+[ ] B4. Score patches on real data (tests passed, lines changed, risk)
+        instead of the current formula over canned strings.
+
+
+C. REAL GITHUB AND SLACK
+------------------------
+[ ] C1. Open a real draft pull request with the winning patch applied
+        Needs a GitHub token and a target repository. Create the branch, commit
+        the changed file and open the draft PR.
+[ ] C2. Send a real Slack message with a link to the pull request
+[ ] C3. Let the UI link to the real PR and show its status
+[ ] C4. Make the "Approve action" button actually do something
+        Right now it only records the approval. Decide what a rollback or
+        failover should trigger.
+
+
+D. DETECTION AND INGESTION
+--------------------------
+[ ] D1. Accept real Sentry and Datadog webhook payloads
+        Map their format to our crash payload, and verify the webhook signature.
+[ ] D2. Group repeated crashes into one incident
+        Ten identical errors in a minute should not create ten incidents.
+        Count the occurrences instead.
+[ ] D3. Also detect failing responses that do not raise an error (5xx, very slow)
+[ ] D4. Read logs from a real source instead of the in-memory buffer
+        For example a log file, Loki or CloudWatch.
+[ ] D5. Detect the culprit commit from real git history
+        Replace the fixed commit data with `git log` and `git blame` on the
+        failing file and line.
+
+
+E. BACKEND QUALITY
+------------------
+[ ] E1. Push live updates to the UI (SSE) instead of polling
+        The stream endpoint already exists. Wire it to the frontend.
+[ ] E2. Make the demo-mode information in the agents come from real checks
+        (Infra Checker should really probe the dependencies it names).
+[ ] E3. Add automated tests for the backend
+        Crash detector, webhook, orchestrator, validator, API shapes.
+[ ] E4. Add authentication or a shared secret on the webhook and approve routes
+[ ] E5. Add a way to clear or archive old incidents (and a clean database
+        for demos)
+[ ] E6. Remove leftover code that no longer fits
+        The /simulate route and the old JavaScript patches in the validator.
+[ ] E7. Update the README to match the real flow, API shapes and demo commands
+
+
+F. FRONTEND
+-----------
+[ ] F1. Check every page in a browser, in light and dark mode, and on a phone
+        (we have not looked at the new pages yet)
+[ ] F2. Subscribe to the live stream and animate the stages as they happen
+[ ] F3. Show the full stack trace on the Incident page
+[ ] F4. Add search and filters to History (service, error type, status)
+[ ] F5. Add a desktop notification or sound when a new incident arrives
+[ ] F6. Add a "Run on a failing request" button that triggers the demo bugs
+        from the UI, so the demo does not need curl.
+[ ] F7. Show a clear message when an incident has no fix (FAILED) with
+        suggested next steps
+[ ] F8. Accessibility pass: keyboard use, focus order, contrast in both themes
+[ ] F9. Loading skeletons instead of plain "Loading..." text
+[ ] F10. Add frontend tests for the polling hook and the main views
+
+
+G. DEMO AND HACKATHON PREP
+--------------------------
+[ ] G1. Write a 3-minute demo script (what to click, what to say, what to curl)
+[ ] G2. One command to start everything (backend, frontend, clean database)
+[ ] G3. Add more demo bugs of different kinds
+        An unhandled database error, a missing key, a bad type from the client.
+[ ] G4. Record a short screen capture or GIF of the full flow
+[ ] G5. Prepare a slide or one-pager: problem, flow, numbers (time to fix)
+[ ] G6. Benchmark and report the real time from crash to pull request
+
+
+H. HOUSEKEEPING
+---------------
+[ ] H1. Commit the current work in sensible pieces
+        Backend crash flow, incident storage and API, frontend redesign.
+[ ] H2. Add a .env.example entry for every setting that exists
+[ ] H3. Pin dependency versions and add the missing ones to requirements.txt
+[ ] H4. Fix the Python and Node versions the project targets and document them
+
+
+SUGGESTED ORDER
+---------------
+1. F1  (see what we built, fix what looks wrong)
+2. A1 + A2  (makes the whole thing real; biggest demo impact)
+3. B1 + B3  (real proof that a fix works)
+4. C1 + C2  (real pull request and Slack message)
+5. E1 + F2  (live updates)
+6. G1, G2, G5  (demo prep)

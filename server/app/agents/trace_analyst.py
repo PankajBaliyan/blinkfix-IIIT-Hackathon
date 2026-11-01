@@ -15,10 +15,10 @@ class TraceAnalyst(BaseAgent):
         
         file = payload.file
         line = payload.line
-        func = payload.functionName or "processPayment"
+        func = payload.functionName or "unknown"
         
-        logs.append(f"[00:00.320] Parsed Sentry stack frame: {file}:{line} in {func}().")
-        logs.append(f"[00:00.370] Root cause: Null pointer dereference on cart.currency.")
+        logs.append(f"[00:00.320] Parsed stack frame: {file}:{line} in {func}().")
+        logs.append(f"[00:00.370] Root cause: {payload.message}")
 
         return {
             "summary": f"Isolated {file}:{line} in {func}(). Error: {payload.message}",

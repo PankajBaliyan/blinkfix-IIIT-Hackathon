@@ -15,6 +15,13 @@ def get_connection() -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous=NORMAL;")
     return conn
 
+def _add_missing_columns(conn: sqlite3.Connection, table: str, columns: Dict[str, str]) -> None:
+    """Adds columns that older database files do not have yet."""
+    existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+    for name, ddl in columns.items():
+        if name not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+
 def init_db() -> None:
     """Initializes SQLite schema if not already created."""
     conn = get_connection()
@@ -61,6 +68,16 @@ def init_db() -> None:
                     FOREIGN KEY(incident_id) REFERENCES incidents(id)
                 );
             """)
+            _add_missing_columns(conn, "incidents", {
+                "payload_json": "TEXT",
+                "logs_json": "TEXT",
+            })
+            _add_missing_columns(conn, "candidate_patches", {
+                "title": "TEXT",
+                "explanation": "TEXT",
+                "confidence": "REAL DEFAULT 0",
+                "validation_json": "TEXT",
+            })
         logger.info(f"SQLite database initialized at {settings.DATABASE_PATH}")
     finally:
         conn.close()
@@ -73,8 +90,9 @@ def save_incident(incident: Dict[str, Any]) -> None:
                 """
                 INSERT OR REPLACE INTO incidents (
                     id, service, error_name, error_message, file, line, status,
-                    duration_ms, culprit_commit, winning_patch_id, pr_url, rollback_approved, context_snapshot
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    duration_ms, culprit_commit, winning_patch_id, pr_url, rollback_approved, context_snapshot,
+                    payload_json, logs_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     incident["id"],
@@ -90,6 +108,8 @@ def save_incident(incident: Dict[str, Any]) -> None:
                     incident.get("pr_url"),
                     1 if incident.get("rollback_approved") else 0,
                     json.dumps(incident.get("context_snapshot", {})),
+                    incident.get("payload_json"),
+                    json.dumps(incident.get("logs", [])),
                 ),
             )
     finally:
@@ -154,15 +174,90 @@ def save_agent_run(incident_id: str, agent_result: Dict[str, Any]) -> None:
     finally:
         conn.close()
 
-def list_recent_incidents(limit: int = 10) -> List[Dict[str, Any]]:
+def save_patches(incident_id: str, patches: List[Dict[str, Any]]) -> None:
+    """Replaces the stored candidate patches for an incident."""
+    conn = get_connection()
+    try:
+        with conn:
+            conn.execute("DELETE FROM candidate_patches WHERE incident_id = ?", (incident_id,))
+            for p in patches:
+                conn.execute(
+                    """
+                    INSERT INTO candidate_patches (
+                        incident_id, patch_id, strategy, code, is_winner, validation_score,
+                        title, explanation, confidence, validation_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        incident_id,
+                        p["id"],
+                        p["strategy"],
+                        p["code"],
+                        1 if p.get("isWinner") else 0,
+                        p.get("validation", {}).get("score", 0),
+                        p.get("title"),
+                        p.get("explanation"),
+                        p.get("confidence", 0),
+                        json.dumps(p.get("validation", {})),
+                    ),
+                )
+    finally:
+        conn.close()
+
+def get_patches(incident_id: str) -> List[Dict[str, Any]]:
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM candidate_patches WHERE incident_id = ? ORDER BY id", (incident_id,)
+        ).fetchall()
+        return [
+            {
+                "id": r["patch_id"],
+                "title": r["title"] or r["strategy"],
+                "strategy": r["strategy"],
+                "explanation": r["explanation"] or "",
+                "confidence": r["confidence"] or 0,
+                "isWinner": bool(r["is_winner"]),
+                "validation": json.loads(r["validation_json"]) if r["validation_json"] else {},
+                "code": r["code"],
+            }
+            for r in rows
+        ]
+    finally:
+        conn.close()
+
+def get_agent_runs(incident_id: str) -> List[Dict[str, Any]]:
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM agent_runs WHERE incident_id = ? ORDER BY id", (incident_id,)
+        ).fetchall()
+        return [
+            {
+                "name": r["agent_name"],
+                "status": r["status"],
+                "durationMs": r["duration_ms"],
+                "summary": r["summary"] or "",
+                "logs": json.loads(r["logs_json"]) if r["logs_json"] else [],
+                "findings": json.loads(r["findings_json"]) if r["findings_json"] else {},
+            }
+            for r in rows
+        ]
+    finally:
+        conn.close()
+
+def list_recent_incidents(limit: int = 50) -> List[Dict[str, Any]]:
     conn = get_connection()
     try:
         cur = conn.cursor()
         cur.execute(
-            "SELECT id, service, error_name, error_message, status, created_at, duration_ms, pr_url FROM incidents ORDER BY created_at DESC LIMIT ?",
+            """
+            SELECT id, service, error_name, error_message, file, line, status, created_at,
+                   duration_ms, pr_url, rollback_approved, payload_json
+            FROM incidents ORDER BY created_at DESC, rowid DESC LIMIT ?
+            """,
             (limit,),
         )
         return [dict(row) for row in cur.fetchall()]
     finally:
         conn.close()
-

@@ -20,7 +20,9 @@ interface SidebarProps {
   theme: ThemeMode;
   onSetTheme: (theme: ThemeMode) => void;
   status: IncidentStatus;
-  formattedTime: string;
+  /** The incident being shown, if any. */
+  incidentId: string | null;
+  incidentCount: number;
 }
 
 const Brand: React.FC = () => (
@@ -38,11 +40,11 @@ const Panel: React.FC<SidebarProps & { onPick: () => void }> = ({
   theme,
   onSetTheme,
   status,
-  formattedTime,
+  incidentId,
+  incidentCount,
   onPick,
 }) => {
   const info = statusInfo(status);
-  const idle = status === 'STANDBY';
 
   return (
     <div className="flex h-full flex-col">
@@ -73,7 +75,10 @@ const Panel: React.FC<SidebarProps & { onPick: () => void }> = ({
       <div className="space-y-3 border-t border-line p-4">
         <div className="rounded-md bg-sunken px-3.5 py-3" aria-live="polite">
           <Badge tone={info.tone}>{info.label}</Badge>
-          {!idle && <p className="tabular mt-2 font-mono text-lg">{formattedTime}</p>}
+          <p className="mt-2 truncate font-mono text-xs text-muted">
+            {incidentId ?? 'Waiting for a crash'}
+          </p>
+          {incidentCount > 1 && <p className="mt-0.5 text-xs text-faint">{incidentCount} incidents recorded</p>}
         </div>
 
         <div className="grid grid-cols-2 gap-1 rounded-md border border-line p-0.5" role="radiogroup" aria-label="Theme">

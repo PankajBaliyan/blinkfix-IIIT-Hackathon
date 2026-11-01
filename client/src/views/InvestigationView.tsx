@@ -1,34 +1,28 @@
 import React, { useState } from 'react';
 import { Activity, Bug, ChevronDown, GitCommit, Server, ShieldAlert } from 'lucide-react';
-import { AgentInfo, AgentRole, IncidentStatus, Scenario } from '../types';
+import { AgentRun, IncidentDetail } from '../types';
 import { Badge, CardHeader, CheckIcon, EmptyState, PageTitle, Tone } from '../components/ui';
+import { isActive } from '../hooks/useIncidents';
 
-const AGENT_META: Record<AgentRole, { icon: React.ElementType; question: string }> = {
-  'trace-analyst': { icon: Bug, question: 'Where in the code did it fail?' },
-  'git-detective': { icon: GitCommit, question: 'Which change caused it, and who made it?' },
-  'infra-checker': { icon: Server, question: 'Is it our code, or an outside service?' },
-  'impact-analyst': { icon: Activity, question: 'Who and what is affected?' },
-  'mitigation-planner': { icon: ShieldAlert, question: 'What is the safest way to stop it now?' },
-};
-
-const statusTone: Record<AgentInfo['status'], { label: string; tone: Tone }> = {
-  IDLE: { label: 'Waiting', tone: 'neutral' },
-  THINKING: { label: 'Starting', tone: 'accent' },
-  ANALYZING: { label: 'Working', tone: 'accent' },
-  COMPLETED: { label: 'Done', tone: 'ok' },
-  FAILED: { label: 'Failed', tone: 'bad' },
-};
+const AGENTS: { name: string; icon: React.ElementType; question: string }[] = [
+  { name: 'Trace Analyst', icon: Bug, question: 'Where in the code did it fail?' },
+  { name: 'Git Detective', icon: GitCommit, question: 'Which change caused it, and who made it?' },
+  { name: 'Infra Checker', icon: Server, question: 'Is it our code, or an outside service?' },
+  { name: 'Impact Analyst', icon: Activity, question: 'Who and what is affected?' },
+  { name: 'Mitigation Planner', icon: ShieldAlert, question: 'What is the safest way to stop it now?' },
+];
 
 const depTone = { HEALTHY: 'ok', DEGRADED: 'warn', DOWN: 'bad' } as const;
 const depLabel = { HEALTHY: 'Healthy', DEGRADED: 'Slow', DOWN: 'Down' } as const;
 
-const AgentRow: React.FC<{ agent: AgentInfo }> = ({ agent }) => {
+const AgentRow: React.FC<{
+  meta: (typeof AGENTS)[number];
+  run: AgentRun | undefined;
+  working: boolean;
+}> = ({ meta, run, working }) => {
   const [open, setOpen] = useState(false);
-  const meta = AGENT_META[agent.id];
   const Icon = meta.icon;
-  const st = statusTone[agent.status];
-  const working = agent.status === 'THINKING' || agent.status === 'ANALYZING';
-  const done = agent.status === 'COMPLETED';
+  const tone: Tone = run ? 'ok' : 'neutral';
 
   return (
     <li className="px-5 py-4">
@@ -38,94 +32,121 @@ const AgentRow: React.FC<{ agent: AgentInfo }> = ({ agent }) => {
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <h3 className="text-sm font-semibold">{agent.name}</h3>
+            <h3 className="text-sm font-semibold">{meta.name}</h3>
             <span className="text-xs text-muted">{meta.question}</span>
           </div>
-          <p className={`mt-1.5 text-sm ${done ? 'text-ink' : 'text-muted'}`}>{agent.summary}</p>
-          <button
-            onClick={() => setOpen(!open)}
-            aria-expanded={open}
-            className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
-          >
-            {open ? 'Hide activity' : 'Show activity'}
-            <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
-          </button>
-          {open && (
-            <pre className="scroll-slim mt-2 overflow-x-auto rounded-md border border-line bg-sunken px-3 py-2 font-mono text-xs leading-5 text-muted">
-              {agent.logs.join('\n')}
-            </pre>
+          <p className={`mt-1.5 text-sm ${run ? 'text-ink' : 'text-muted'}`}>
+            {run ? run.summary : working ? 'Looking into the crash…' : 'No result was saved for this agent.'}
+          </p>
+          {run && (
+            <>
+              <button
+                onClick={() => setOpen(!open)}
+                aria-expanded={open}
+                className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+              >
+                {open ? 'Hide activity' : 'Show activity'}
+                <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+              </button>
+              {open && (
+                <pre className="scroll-slim mt-2 overflow-x-auto rounded-md border border-line bg-sunken px-3 py-2 font-mono text-xs leading-5 text-muted">
+                  {run.logs.join('\n')}
+                </pre>
+              )}
+            </>
           )}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
-          {working ? <CheckIcon state="running" /> : <Badge tone={st.tone}>{st.label}</Badge>}
-          {done && <span className="tabular text-xs text-muted">{agent.latencyMs} ms</span>}
+          {!run && working ? <CheckIcon state="running" /> : <Badge tone={tone}>{run ? 'Done' : 'Waiting'}</Badge>}
+          {run && <span className="tabular text-xs text-muted">{run.durationMs} ms</span>}
         </div>
       </div>
     </li>
   );
 };
 
-interface InvestigationViewProps {
-  agents: AgentInfo[];
-  scenario: Scenario;
-  status: IncidentStatus;
-  onStart: () => void;
-}
+export const InvestigationView: React.FC<{ detail: IncidentDetail | null }> = ({ detail }) => {
+  const subtitle = 'Five agents examine the crash at the same time, each from a different angle.';
 
-export const InvestigationView: React.FC<InvestigationViewProps> = ({ agents, scenario, status, onStart }) => {
-  if (status === 'STANDBY') {
+  if (!detail) {
     return (
       <div className="space-y-6">
-        <PageTitle title="Investigation" subtitle="Five agents examine the crash at the same time, each from a different angle." />
+        <PageTitle title="Investigation" subtitle={subtitle} />
         <EmptyState
           title="Nothing to investigate yet"
-          body="Start the demo and the agents will report here as they finish."
-          action={<button className="btn btn-primary" onClick={onStart}>Start demo</button>}
+          body="When the service crashes, the agents report here as they finish."
         />
       </div>
     );
   }
 
-  const finished = agents.filter((a) => a.status === 'COMPLETED').length;
+  const working = isActive(detail.status);
+  const runs = new Map(detail.agents.map((a) => [a.name, a]));
+  const finished = AGENTS.filter((a) => runs.has(a.name)).length;
+  const services = detail.infra?.services ?? [];
+  const routes = detail.impact?.affected_routes ?? [];
 
   return (
     <div className="space-y-6">
       <PageTitle
         title="Investigation"
-        subtitle="Five agents examine the crash at the same time, each from a different angle."
-        right={<Badge tone={finished === agents.length ? 'ok' : 'accent'}>{finished} of {agents.length} finished</Badge>}
+        subtitle={subtitle}
+        right={<Badge tone={finished === AGENTS.length ? 'ok' : 'accent'}>{finished} of {AGENTS.length} finished</Badge>}
       />
 
       <section className="card">
-        <CardHeader title="Agents" hint="They run in parallel, so the investigation takes as long as the slowest one." />
+        <CardHeader
+          title="Agents"
+          hint={`For ${detail.error.type} on ${detail.error.method} ${detail.error.route}. They run in parallel, so it takes as long as the slowest one.`}
+        />
         <ul className="divide-y divide-line">
-          {agents.map((a) => <AgentRow key={a.id} agent={a} />)}
+          {AGENTS.map((meta) => (
+            <AgentRow key={meta.name} meta={meta} run={runs.get(meta.name)} working={working} />
+          ))}
         </ul>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="card">
-          <CardHeader title="Outside services" hint="Checked to rule out a problem that is not in our code." />
-          <ul className="divide-y divide-line">
-            {scenario.infraStatus.map((s) => (
-              <li key={s.service} className="flex items-center justify-between gap-3 px-5 py-3">
-                <span className="min-w-0 truncate text-sm">{s.service}</span>
-                <span className="flex shrink-0 items-center gap-3">
-                  <span className="tabular text-xs text-muted">{s.latencyMs} ms</span>
-                  <Badge tone={depTone[s.status]}>{depLabel[s.status]}</Badge>
-                </span>
-              </li>
-            ))}
-          </ul>
+          <CardHeader
+            title="Outside services"
+            hint="Checked to rule out a problem that is not in our code."
+            right={
+              detail.infra ? (
+                <Badge tone={detail.infra.is_external ? 'warn' : 'ok'}>
+                  {detail.infra.is_external ? 'Outside problem' : 'Our code'}
+                </Badge>
+              ) : undefined
+            }
+          />
+          {services.length === 0 ? (
+            <p className="px-5 py-4 text-sm text-muted">Waiting for the Infra Checker.</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {services.map((s) => (
+                <li key={s.service} className="flex items-center justify-between gap-3 px-5 py-3">
+                  <span className="min-w-0 truncate text-sm">{s.service}</span>
+                  <span className="flex shrink-0 items-center gap-3">
+                    <span className="tabular text-xs text-muted">{s.latencyMs} ms</span>
+                    <Badge tone={depTone[s.status]}>{depLabel[s.status]}</Badge>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         <section className="card">
-          <CardHeader title="Affected requests" hint={scenario.blastRadius.impactPercentage} />
-          <ul className="divide-y divide-line">
-            {scenario.blastRadius.affectedRoutes.map((r) => (
-              <li key={r} className="px-5 py-3 font-mono text-sm">{r}</li>
-            ))}
-          </ul>
+          <CardHeader title="Affected requests" hint={detail.impact?.impact_percentage ?? 'Waiting for the Impact Analyst.'} />
+          {routes.length === 0 ? (
+            <p className="px-5 py-4 text-sm text-muted">No affected requests reported yet.</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {routes.map((r) => (
+                <li key={r} className="px-5 py-3 font-mono text-sm">{r}</li>
+              ))}
+            </ul>
+          )}
         </section>
       </div>
     </div>

@@ -13,6 +13,9 @@ class CrashPayload(BaseModel):
     functionName: Optional[str] = "processPayment"
     timestamp: Optional[str] = None
     stackTrace: Optional[str] = None
+    requestId: Optional[str] = None
+    route: Optional[str] = None
+    method: Optional[str] = None
 
 class SimulateRequest(BaseModel):
     scenarioId: str = "payments-typeerror"
