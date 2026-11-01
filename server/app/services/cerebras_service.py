@@ -27,8 +27,11 @@ class CerebrasClient:
         if response.is_error:
             raise RuntimeError(f'Cerebras HTTP {response.status_code}; check credentials/model/quota')
         try:
-            payload = json.loads(response.json()['choices'][0]['message']['content'])
-            return AnalysisResponse.model_validate(payload).model_dump()
+            body = response.json()
+            payload = json.loads(body['choices'][0]['message']['content'])
+            validated = AnalysisResponse.model_validate(payload).model_dump()
+            validated['provider_usage'] = body.get('usage')
+            return validated
         except (ValueError, KeyError, TypeError, ValidationError) as exc:
             raise RuntimeError('Cerebras returned malformed analysis JSON') from exc
 

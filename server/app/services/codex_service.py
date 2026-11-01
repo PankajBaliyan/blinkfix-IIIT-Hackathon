@@ -42,3 +42,44 @@ async def generate_candidates(source, error, contract, analyses, tests):
         raise
     except (ValueError, KeyError, TypeError, ValidationError) as exc:
         raise RuntimeError('Codex returned malformed candidate JSON') from exc
+
+
+async def generate_repository_candidates(context: dict):
+    """Generate constrained replacement content for one configured repository file."""
+    if not settings.OPENAI_API_KEY:
+        raise RuntimeError('OPENAI_API_KEY is required for live repository patch generation')
+    prompt = json.dumps(context)
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            response = await client.post(
+                'https://api.openai.com/v1/responses',
+                headers={'Authorization': f'Bearer {settings.OPENAI_API_KEY}'},
+                json={'model': settings.CODEX_MODEL, 'store': False, 'max_output_tokens': 20000,
+                      'instructions': 'Repair the configured JavaScript repository bug using only the supplied '
+                        'pre-fix evidence. Return JSON {"candidates":[{"code":"complete replacement file"}]}. '
+                        'Return one to three complete replacements for target_file. Do not change or generate tests, '
+                        'dependencies, commands, or other files. Do not claim execution. Abstain by returning no '
+                        'candidate is unsupported; the orchestrator will report that as no verified patch.',
+                      'input': prompt},
+            )
+    except httpx.TimeoutException as exc:
+        raise RuntimeError('Codex repository request timed out after 120 seconds') from exc
+    if response.is_error:
+        raise RuntimeError(f'Codex HTTP {response.status_code}; repository patch generation failed')
+    try:
+        body = response.json()
+        if body.get('status') != 'completed':
+            raise RuntimeError(f"Codex repository response did not complete: {body.get('status')}")
+        text = ''.join(c.get('text', '') for item in body.get('output', [])
+                       if item.get('type') == 'message' for c in item.get('content', [])
+                       if c.get('type') == 'output_text')
+        parsed = CandidateResponse.model_validate(json.loads(text))
+        return {
+            'candidates': [{'id': f'patch-{index}', 'code': candidate.code}
+                           for index, candidate in enumerate(parsed.candidates, 1)],
+            'usage': body.get('usage'),
+        }
+    except RuntimeError:
+        raise
+    except (ValueError, KeyError, TypeError, ValidationError) as exc:
+        raise RuntimeError('Codex returned malformed repository candidate JSON') from exc

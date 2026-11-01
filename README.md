@@ -4,6 +4,24 @@ Hackathon scope: one reproducible checkout currency bug and one explicit
 payment-gateway outage fixture. React UI, FastAPI backend, Node regressions,
 Cerebras parallel analysis, and Codex candidate generation. Slack is deferred.
 
+The next milestone adds one configured real-repository proof: Express PR 4893
+at a pinned pre-fix revision. Its provenance, environment limits, data-leakage
+boundary, and acceptance criteria are in [Real Bug Proof](docs/Real%20Bug%20Proof.md).
+The checkout fixture remains the offline fallback.
+
+From `server`, reproduce the real bug without calling a model:
+
+```powershell
+.\.venv\Scripts\python.exe run_real_bug.py --bug express-4893
+```
+
+The command clones or resets the configured repository, verifies its exact SHA,
+installs dependencies when needed, runs the unchanged focused repository suite,
+then requires the BlinkFix-added reproducer to fail. A failure to reproduce is
+an abstention and prevents analysis, candidate generation, and publication.
+Live `--repair parallel` and `--repair single` modes remain unavailable until
+credentials are configured; neither mode publishes a PR in this milestone.
+
 ## Currency behavior and proof
 
 Read the [currency contract](server/fixtures/checkout/CONTRACT.md) first.

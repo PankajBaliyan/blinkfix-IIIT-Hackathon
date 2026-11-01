@@ -16,6 +16,8 @@ from app.services.patch_validator import FIXTURE, validate_candidate, rank_and_s
 from app.services.github_service import create_draft_pull_request
 from app.services.codex_service import generate_candidates
 from app.services.cerebras_service import cerebras_client
+from app.services import real_bug_orchestrator
+from app.services.repository_workflow import load_manifest, run_command
 
 SOURCE = (FIXTURE / 'payments.cjs').read_text()
 CORRECT = (FIXTURE.parent / 'candidates/correct.cjs').read_text()
@@ -79,6 +81,14 @@ class PipelineTests(unittest.TestCase):
         serialized = response.text
         self.assertNotIn('cerebras-secret', serialized)
         self.assertNotIn('github-secret', serialized)
+
+    def test_real_bug_metadata_exposes_scope_without_evaluation_patch(self):
+        response = self.client.get('/api/real-bugs/express-4893')
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body['target_file'], 'lib/response.js')
+        self.assertTrue(body['upstream_fix_reserved_for_evaluation'])
+        self.assertNotIn('upstream_merge_revision', body)
 
     def test_external_outage_stops_before_models_or_execution(self):
         with patch.object(orchestrator, 'generate_candidates', new_callable=AsyncMock) as generate, \
@@ -311,6 +321,53 @@ class ProviderTests(unittest.TestCase):
         with patch.object(settings, 'GITHUB_TOKEN', 'test'), self.client_patch(lambda r: self.fail('Network called')):
             with self.assertRaisesRegex(RuntimeError, 'failed revalidation'):
                 asyncio.run(create_draft_pull_request('inc_bad', SOURCE, {'id':'bad','code':BAD}))
+
+
+class RealRepositoryWorkflowTests(unittest.TestCase):
+    def test_manifest_pins_real_revision_and_reserves_upstream_fix(self):
+        manifest = load_manifest('express-4893')
+        self.assertEqual(manifest.repository, 'https://github.com/expressjs/express.git')
+        self.assertEqual(manifest.broken_revision, '947b6b7d57939d1a3b33ce008765f9aba3eb6f70')
+        self.assertEqual(manifest.target_file, 'lib/response.js')
+        self.assertNotEqual(manifest.broken_revision, manifest.upstream_merge_revision)
+
+    def test_repository_commands_do_not_receive_provider_secrets(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.dict(os.environ, {'OPENAI_API_KEY':'secret-sentinel'}):
+            result = run_command(['node', '-e', "if(process.env.OPENAI_API_KEY)process.exit(9)"], Path(directory))
+        self.assertEqual(result['exit_code'], 0)
+
+    def test_reproduction_failure_abstains_before_models(self):
+        with patch.object(real_bug_orchestrator, 'prepare_repository', side_effect=RuntimeError('did not reproduce')), \
+             patch.object(real_bug_orchestrator, 'generate_repository_candidates', new_callable=AsyncMock) as generate:
+            result = asyncio.run(real_bug_orchestrator.repair_real_bug('express-4893'))
+        self.assertEqual(result['status'], 'ABSTAINED')
+        self.assertEqual(result['stage'], 'reproduction')
+        generate.assert_not_called()
+
+    def test_mocked_parallel_path_uses_evidence_roles_and_executable_winner(self):
+        prepared = {
+            'report':'report', 'report_url':'https://example.test/report', 'repository':'https://example.test/repo.git',
+            'revision':'a'*40, 'target_file':'lib/response.js', 'source':'source',
+            'reproduction':{'exit_code':1}, 'regression':{'exit_code':0},
+            'git_history':'real history', 'head_target_diff':'real diff',
+        }
+        validation = {'passed':True, 'diff':'one\ntwo', 'checks':{}}
+        with patch.object(settings, 'OPENAI_API_KEY', 'test'), patch.object(settings, 'CEREBRAS_API_KEY', 'test'), \
+             patch.object(real_bug_orchestrator, 'prepare_repository', return_value=prepared), \
+             patch.object(cerebras_client, 'complete_json', new_callable=AsyncMock,
+                          return_value={'summary':'evidence only','findings':{}}) as analyze, \
+             patch.object(real_bug_orchestrator, 'generate_repository_candidates', new_callable=AsyncMock,
+                          return_value={'candidates':[{'id':'patch-1','code':'candidate'}], 'usage':{'input_tokens':1}}), \
+             patch.object(real_bug_orchestrator, 'validate_repository_candidate', return_value=validation):
+            result = asyncio.run(real_bug_orchestrator.repair_real_bug('express-4893'))
+        self.assertEqual(result['status'], 'VALIDATED')
+        self.assertEqual(len(result['agents']), 5)
+        self.assertEqual(analyze.await_count, 4)
+        infra = next(agent for agent in result['agents'] if agent['agent_name'] == 'Infrastructure Analyst')
+        self.assertIn('Insufficient evidence', infra['summary'])
+        self.assertEqual(result['winner_id'], 'patch-1')
+        self.assertIsNone(result['pr_url'])
 
 
 if __name__ == '__main__':

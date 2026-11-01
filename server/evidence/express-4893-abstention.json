@@ -1,0 +1,10 @@
+{
+  "recorded_at": "2026-11-01",
+  "status": "ABSTAINED",
+  "stage": "provider",
+  "reason": "OPENAI_API_KEY and CEREBRAS_API_KEY are both required for the fair live comparison; reproduction succeeded but model calls were not attempted.",
+  "pr_url": null,
+  "publishing_status": "NOT_ATTEMPTED",
+  "duration_ms": 5056,
+  "label": "Measured local workflow result; no model or publishing call was made."
+}

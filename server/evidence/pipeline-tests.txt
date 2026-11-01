@@ -3,8 +3,8 @@ Date: 2026-11-01
 Command: .venv/Scripts/python.exe -m unittest discover -s tests -v
 
 Result: PASS
-Tests run: 28
-Duration: 20.183 seconds
+Tests run: 33
+Duration: 24.596 seconds
 
 Covered behavior includes:
 - immutable original, rejected fallback, and passing candidate execution
@@ -16,9 +16,11 @@ Covered behavior includes:
 - event replay, reconnect cursors, and restart failure recovery
 - infrastructure mitigation with zero analysis, patches, execution, or publication
 - winner revalidation, remote source matching, commit-before-PR ordering, and publication failure
+- configured real-repository provenance and secret-free command execution
+- reproduction-first abstention and mocked, explicitly labeled real-repository orchestration
 
 unittest summary:
 ----------------------------------------------------------------------
-Ran 28 tests in 20.183s
+Ran 33 tests in 24.596s
 
 OK

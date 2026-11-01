@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .services.cerebras_service import cerebras_client
-from .routes import incident, stream, health
+from .routes import incident, stream, health, real_bugs
 from .state import initialize, recover_interrupted
 
 # Configure logging
@@ -44,6 +44,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(incident.router)
 app.include_router(stream.router)
+app.include_router(real_bugs.router)
 
 @app.get('/api/fixture')
 async def checkout_fixture():
@@ -64,6 +65,9 @@ async def root():
             "GET  /api/incidents/{incident_id}/stream (SSE)",
             "GET  /api/fixture",
             "GET  /api/health",
+            "POST /api/real-bugs/{bug_id}/reproduce",
+            "POST /api/real-bugs/{bug_id}/repair",
+            "POST /api/real-bugs/{bug_id}/validate",
         ],
     }
 
