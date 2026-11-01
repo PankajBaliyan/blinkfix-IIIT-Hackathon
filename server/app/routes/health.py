@@ -40,5 +40,6 @@ async def health_check():
             "key_set": bool(settings.OPENAI_API_KEY),
         },
         "demo_mode": settings.DEMO_MODE,
+        "auto_open_pr": settings.AUTO_OPEN_PR,
     }
 

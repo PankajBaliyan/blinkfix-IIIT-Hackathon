@@ -6,6 +6,7 @@ export type IncidentStatus =
   | 'MITIGATION_READY'
   | 'SPECULATIVE_REPAIR'
   | 'VALIDATING'
+  | 'DELIVERING'
   | 'RESOLVED'
   | 'FAILED';
 
@@ -41,6 +42,14 @@ export interface PatchValidation {
   unitTestsPassed: string;
   diffLineChange: string;
   score: number;
+  /** Results of actually running the fix in a sandbox copy of the service. */
+  importOk: boolean;
+  replay: 'fixed' | 'still_fails' | 'not_reproduced' | 'blocked' | 'not_run';
+  replayDetail: string;
+  testsRun: number;
+  testsFailed: number;
+  testsDetail: string;
+  verified: boolean;
 }
 
 export interface CandidatePatch {
@@ -105,6 +114,8 @@ export interface IncidentDetail extends IncidentSummary {
   /** Where the code was read from: GitHub, or the local copy when GitHub could not be used. */
   codeOrigin: 'github' | 'local' | null;
   codeNote: string | null;
+  /** Why no pull request was opened automatically, or that an identical one was reused. */
+  prNote: string | null;
   pr: { number: number | null; url: string; branch: string | null } | null;
   agents: AgentRun[];
   culprit: {
@@ -134,12 +145,21 @@ export interface IncidentDetail extends IncidentSummary {
     risk_level: 'LOW' | 'MEDIUM' | 'HIGH';
   } | null;
   patches: CandidatePatch[];
+  /** What the original code did in the sandbox. Every fix is judged against it. */
+  validation: {
+    reproduced: boolean;
+    baseline_exception: string | null;
+    baseline_tests_run: number;
+    baseline_test_failures: number;
+    note: string;
+  } | null;
 }
 
 export interface Health {
   status: string;
   version: string;
   demo_mode: boolean;
+  auto_open_pr: boolean;
   cerebras: { configured: boolean; model: string };
   github: { configured: boolean; oauth_configured: boolean; repo: string };
   codex: { configured: boolean; model: string | null; key_set: boolean };

@@ -190,6 +190,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <Badge tone={health.codex.configured ? 'ok' : 'neutral'}>{health.codex.model ?? 'Off'}</Badge>
               </Row>
               <Row
+                title="Pull requests"
+                hint={health.auto_open_pr ? 'A draft pull request opens by itself once a fix is verified. Unverified fixes are left for you to review.' : 'A pull request opens only when you click the button on the Fix page.'}
+              >
+                <Badge tone={health.auto_open_pr ? 'ok' : 'neutral'}>{health.auto_open_pr ? 'Automatic' : 'On request'}</Badge>
+              </Row>
+              <Row
                 title="Slack"
                 hint={health.demo_mode ? 'Messages are simulated. Nothing is sent to Slack.' : 'Messages are sent to your incidents channel.'}
               >

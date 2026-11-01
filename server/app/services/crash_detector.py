@@ -1,9 +1,11 @@
 import asyncio
+import json
 import logging
+import re
 import traceback
 import uuid
 from pathlib import Path
-from typing import Set
+from typing import Optional, Set
 
 import httpx
 from fastapi import Request
@@ -25,7 +27,33 @@ WATCHED_PREFIX = "/api/demo"
 _pending: Set[asyncio.Task] = set()
 
 
-def build_crash_payload(exc: Exception, request: Request, incident_id: str, request_id: str) -> CrashPayload:
+MAX_BODY_BYTES = 8192
+_SECRET_KEY = re.compile(r"pass|secret|token|card|cvv|cvc|ssn|key|auth", re.I)
+
+
+def _mask_secrets(value):
+    """Replaces the values of sensitive-looking keys, at any depth."""
+    if isinstance(value, dict):
+        return {k: "[redacted]" if _SECRET_KEY.search(str(k)) else _mask_secrets(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_mask_secrets(v) for v in value]
+    return value
+
+
+def _safe_body(raw: bytes) -> Optional[str]:
+    """The request body as text for replay, with secrets masked. None if there is no body or it is too big."""
+    if not raw or len(raw) > MAX_BODY_BYTES:
+        return None
+    text = raw.decode("utf-8", errors="replace")
+    try:
+        return json.dumps(_mask_secrets(json.loads(text)))
+    except ValueError:
+        return text
+
+
+def build_crash_payload(
+    exc: Exception, request: Request, incident_id: str, request_id: str, body: bytes = b""
+) -> CrashPayload:
     """Turns an unhandled exception into the crash payload a tool like Sentry would send."""
     frames = traceback.extract_tb(exc.__traceback__)
     app_dir = str(BASE_DIR / "app")
@@ -56,6 +84,8 @@ def build_crash_payload(exc: Exception, request: Request, incident_id: str, requ
         requestId=request_id,
         route=request.url.path,
         method=request.method,
+        requestBody=_safe_body(body),
+        queryString=request.url.query or None,
     )
 
 
@@ -77,6 +107,7 @@ class CrashDetectionMiddleware(BaseHTTPMiddleware):
         request_id = f"req_{uuid.uuid4().hex[:6]}"
         token = request_id_var.set(request_id)
         logger.info("%s %s received", request.method, request.url.path)
+        body = await request.body()
         try:
             response = await call_next(request)
             logger.info("%s %s -> %d", request.method, request.url.path, response.status_code)
@@ -85,7 +116,7 @@ class CrashDetectionMiddleware(BaseHTTPMiddleware):
             incident_id = f"inc_{uuid.uuid4().hex[:8]}"
             logger.error("Unhandled %s on %s %s: %s", type(exc).__name__, request.method, request.url.path, exc)
 
-            payload = build_crash_payload(exc, request, incident_id, request_id)
+            payload = build_crash_payload(exc, request, incident_id, request_id, body)
             webhook_url = f"{request.url.scheme}://{request.url.netloc}/api/incidents/webhook/crash"
             task = asyncio.create_task(_send_webhook(webhook_url, payload))
             _pending.add(task)

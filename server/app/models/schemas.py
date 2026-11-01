@@ -16,6 +16,9 @@ class CrashPayload(BaseModel):
     requestId: Optional[str] = None
     route: Optional[str] = None
     method: Optional[str] = None
+    # What the failing request sent, so it can be replayed against a fix. Secrets are masked.
+    requestBody: Optional[str] = None
+    queryString: Optional[str] = None
 
 class SimulateRequest(BaseModel):
     scenarioId: str = "payments-typeerror"
@@ -32,9 +35,17 @@ class AgentResult(BaseModel):
 class PatchValidation(BaseModel):
     targetFileMatch: bool = True
     astSyntaxValid: bool = True
-    unitTestsPassed: str = "3/3 passing"
+    unitTestsPassed: str = "not run"
     diffLineChange: str = "+3 / -2 lines"
-    score: int = 95
+    score: int = 0
+    # Results of running the fix in a sandbox copy of the service
+    importOk: bool = True
+    replay: str = "not_run"        # fixed | still_fails | not_reproduced | blocked | not_run
+    replayDetail: str = ""
+    testsRun: int = 0
+    testsFailed: int = 0
+    testsDetail: str = ""
+    verified: bool = False
 
 class CandidatePatch(BaseModel):
     id: str

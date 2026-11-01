@@ -81,6 +81,8 @@ def init_db() -> None:
                 "code_origin": "TEXT",
                 "pr_number": "INTEGER",
                 "pr_branch": "TEXT",
+                "validation_json": "TEXT",
+                "pr_note": "TEXT",
             })
             _add_missing_columns(conn, "candidate_patches", {
                 "title": "TEXT",
@@ -284,7 +286,7 @@ def list_recent_incidents(limit: int = 50) -> List[Dict[str, Any]]:
         cur.execute(
             """
             SELECT id, service, error_name, error_message, file, line, status, created_at,
-                   duration_ms, pr_url, rollback_approved, payload_json
+                   duration_ms, pr_url, pr_number, rollback_approved, payload_json
             FROM incidents ORDER BY created_at DESC, rowid DESC LIMIT ?
             """,
             (limit,),

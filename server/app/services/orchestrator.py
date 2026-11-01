@@ -21,7 +21,11 @@ from .context_service import build_deployment_context
 from .evidence import Evidence
 from .incident_events import publish_incident_update
 from .patch_generator import build_candidate_patches
-from .patch_validator import rank_and_select_winner
+from .patch_validator import rank_and_select_winner, rank_validated
+from .validation import validate_candidates
+from .pull_request import PullRequestError, create_pull_request
+from .github_client import get_token
+from ..database import get_integration
 from .source_reader import import_lines_from_text, replace_lines, snippet_from_text
 from .triage import run_shared_triage
 
@@ -39,6 +43,20 @@ def _parses_with(source: SourceFile, patch: CandidatePatch) -> bool:
         return True
     except SyntaxError:
         return False
+
+
+def _auto_pr_skip_reason(winner: CandidatePatch, source: SourceFile) -> Optional[str]:
+    """Why a pull request should not be opened automatically, or None if it can be."""
+    if not winner.validation.verified:
+        return (
+            "No pull request was opened automatically because the best fix could not be fully verified. "
+            "Review it, then open one from the Fix page."
+        )
+    if not get_token():
+        return "Connect GitHub in Settings so pull requests can open automatically."
+    if not source.pr_ready:
+        return "The code was not read from GitHub, so a pull request cannot be built from it."
+    return None
 
 
 async def run_incident_orchestration(
@@ -184,22 +202,28 @@ async def _orchestrate(incident_id: str, payload: CrashPayload, logs: List[Dict[
         await _fail(incident_id, f"No candidate fix for {payload.exceptionType}")
         return
 
-    # 5. Validation gates and ranking
+    # 5. Check every fix by running it, then rank by what happened
     update_incident(incident_id, {"status": "VALIDATING"})
     await publish_incident_update(incident_id)
-    language = "python" if payload.file.endswith(".py") else "javascript"
-    validated = rank_and_select_winner(
-        candidates,
-        language=language,
-        syntax_check=(lambda patch: _parses_with(source, patch)) if language == "python" else None,
-    )
-    winner = next((p for p in validated if p.isWinner), validated[0])
+    outcome = await validate_candidates(payload, source, candidates)
+    if outcome is not None:
+        validated = rank_validated(candidates, outcome.baseline_test_failures)
+        update_incident(incident_id, {"validation_json": json.dumps(outcome.as_dict())})
+    else:
+        # The service cannot be run here, so only the syntax of each fix can be checked.
+        language = "python" if payload.file.endswith(".py") else "javascript"
+        validated = rank_and_select_winner(
+            candidates,
+            language=language,
+            syntax_check=(lambda patch: _parses_with(source, patch)) if language == "python" else None,
+        )
+    winner = next((p for p in validated if p.isWinner), None)
     save_patches(incident_id, [p.model_dump() for p in validated])
     await publish_incident_update(incident_id)
 
-    if not winner.validation.astSyntaxValid:
-        # Never offer a pull request for code that does not even parse.
-        await _fail(incident_id, "No candidate fix produced valid code")
+    if winner is None or not winner.validation.astSyntaxValid:
+        # Never offer a pull request for a fix that crashes, breaks a test, or does not parse.
+        await _fail(incident_id, "No candidate fix passed validation")
         return
 
     await event_bus.broadcast(incident_id, "patch_verified", {
@@ -209,18 +233,48 @@ async def _orchestrate(incident_id: str, payload: CrashPayload, logs: List[Dict[
         "code": winner.code,
     })
 
-    # 6. Fix ready for review. A pull request is opened when the user asks for one.
+    # 6. Deliver: open a draft pull request by itself when that is on and the fix is verified
+    skip_reason = _auto_pr_skip_reason(winner, source)
+    note: Optional[str] = None
+    delivered = False
+    if settings.AUTO_OPEN_PR:
+        if skip_reason:
+            note = skip_reason
+        else:
+            update_incident(incident_id, {
+                "status": "DELIVERING",
+                "duration_ms": int((time.perf_counter() - start_time) * 1000),
+                "culprit_commit": culprit_commit,
+                "winning_patch_id": winner.id,
+            })
+            await publish_incident_update(incident_id)
+            try:
+                login = (get_integration("github") or {}).get("login")
+                await create_pull_request(incident_id, winner.id, login)
+                delivered = True
+            except PullRequestError as e:
+                note = f"A pull request could not be opened automatically: {e.message}"
+            except Exception:
+                logger.exception("Opening the pull request failed")
+                note = "A pull request could not be opened automatically. Try the button on the Fix page."
+
     elapsed_ms = int((time.perf_counter() - start_time) * 1000)
-    update_incident(incident_id, {
+    resolved_fields = {
         "status": "RESOLVED",
         "duration_ms": elapsed_ms,
         "culprit_commit": culprit_commit,
         "winning_patch_id": winner.id,
-    })
+    }
+    if note is not None:  # do not erase a note the pull-request step already saved
+        resolved_fields["pr_note"] = note
+    update_incident(incident_id, resolved_fields)
     await publish_incident_update(incident_id)
     await event_bus.broadcast(incident_id, "incident_completed", {
         "incident_id": incident_id,
         "duration_ms": elapsed_ms,
         "status": "RESOLVED",
     })
-    logger.info(f"Incident {incident_id}: fix ready in {elapsed_ms}ms ({winner.source}: {winner.strategy})")
+    logger.info(
+        f"Incident {incident_id}: fix ready in {elapsed_ms}ms ({winner.source}: {winner.strategy}, "
+        f"verified={winner.validation.verified}, pull request {'opened' if delivered else 'not opened'})"
+    )

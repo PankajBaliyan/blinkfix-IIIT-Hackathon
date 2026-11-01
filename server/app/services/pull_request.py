@@ -2,7 +2,7 @@ import ast
 import logging
 from typing import Any, Dict, Optional
 
-from ..database import update_incident
+from ..database import get_patches, list_recent_incidents, update_incident
 from .github_client import GitHubError, get_token, github_client, repo_path
 from .incident_events import publish_incident_update
 from .incident_view import build_incident_detail
@@ -56,13 +56,30 @@ def _body(detail: Dict[str, Any], patch: Dict[str, Any], login: Optional[str]) -
     return "\n".join(lines)
 
 
+async def _find_open_pr_for_same_fix(incident_id: str, patch: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """An open pull request that already carries exactly this change to this file, from an earlier incident."""
+    for row in list_recent_incidents(100):
+        if row["id"] == incident_id or not row.get("pr_number"):
+            continue
+        earlier = build_incident_detail(row["id"])
+        theirs = next((p for p in get_patches(row["id"]) if earlier and p["id"] == earlier.get("winningPatchId")), None)
+        if not theirs or any(theirs.get(k) != patch.get(k) for k in ("file", "startLine", "endLine", "original", "code")):
+            continue
+        try:
+            if await github_client.get_pull_state(row["pr_number"]) == "open":
+                return {"number": row["pr_number"], "url": row["pr_url"], "branch": (earlier.get("pr") or {}).get("branch")}
+        except GitHubError:
+            continue
+    return None
+
+
 async def create_pull_request(incident_id: str, patch_id: Optional[str], login: Optional[str]) -> Dict[str, Any]:
     detail = build_incident_detail(incident_id)
     if not detail:
         raise PullRequestError(404, "Incident not found.")
     if detail.get("pr"):
         return detail["pr"]
-    if detail["status"] != "RESOLVED":
+    if detail["status"] not in ("RESOLVED", "DELIVERING"):
         raise PullRequestError(409, "The fix is not ready yet.")
     if not get_token():
         raise PullRequestError(401, "Connect GitHub in Settings first.")
@@ -75,6 +92,16 @@ async def create_pull_request(incident_id: str, patch_id: Optional[str], login: 
         raise PullRequestError(404, "That fix does not exist for this incident.")
     if not patch["validation"].get("astSyntaxValid"):
         raise PullRequestError(409, "That fix does not produce valid code.")
+
+    # An identical fix that already has an open pull request is linked instead of opening another one.
+    reused = await _find_open_pr_for_same_fix(incident_id, patch)
+    if reused:
+        update_incident(incident_id, {
+            "pr_url": reused["url"], "pr_number": reused["number"], "pr_branch": reused["branch"],
+            "pr_note": f"An identical fix already has an open pull request (#{reused['number']}), so no new one was opened.",
+        })
+        await publish_incident_update(incident_id)
+        return reused
 
     path = repo_path(patch["file"])
     try:

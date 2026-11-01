@@ -277,7 +277,7 @@ export const IncidentView: React.FC<IncidentViewProps> = ({
                   {detail.pr ? `Draft pull request${prNumber ? ` #${prNumber}` : ''} opened` : 'No pull request yet'}
                 </p>
                 <p className="mt-0.5 text-sm text-muted">
-                  {detail.pr ? 'Review and merge it on GitHub.' : `The best of ${detail.patches.length} candidate fixes is ready. Open a pull request from the Fix page.`}
+                  {detail.prNote ?? (detail.pr ? 'Review and merge it on GitHub.' : `The best of ${detail.patches.length} candidate fixes is ready. Open a pull request from the Fix page.`)}
                 </p>
               </div>
             </div>
@@ -296,7 +296,12 @@ export const IncidentView: React.FC<IncidentViewProps> = ({
             </div>
           </div>
           <div className="border-t border-line px-5 py-3.5">
-            <button className="btn btn-primary" onClick={() => onNavigate('fix')}>{detail.pr ? 'See the fix' : 'Review the fix'}</button>
+            <div className="flex flex-wrap gap-2">
+              {detail.pr && (
+                <a className="btn btn-primary" href={detail.pr.url} target="_blank" rel="noreferrer">Open pull request on GitHub</a>
+              )}
+              <button className={detail.pr ? 'btn' : 'btn btn-primary'} onClick={() => onNavigate('fix')}>{detail.pr ? 'See the fix' : 'Review the fix'}</button>
+            </div>
           </div>
         </section>
       )}

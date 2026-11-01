@@ -112,7 +112,9 @@ export function statusInfo(status: IncidentStatus): { label: string; tone: Tone;
     case 'SPECULATIVE_REPAIR':
       return { label: 'Building fixes', tone: 'accent', detail: 'Writing several different candidate fixes.' };
     case 'VALIDATING':
-      return { label: 'Checking fixes', tone: 'accent', detail: 'Checking that each fix is valid code and picking the best one.' };
+      return { label: 'Checking fixes', tone: 'accent', detail: 'Running each fix against the request that crashed and the service\'s tests.' };
+    case 'DELIVERING':
+      return { label: 'Opening pull request', tone: 'accent', detail: 'The fix is verified. Opening a draft pull request on GitHub.' };
     case 'RESOLVED':
       return { label: 'Fix ready for review', tone: 'ok', detail: 'A fix has been proposed as a draft pull request, ready for review.' };
     case 'FAILED':
@@ -129,6 +131,7 @@ export function stageIndex(status: IncidentStatus): number {
     case 'MITIGATION_READY': return 2;
     case 'SPECULATIVE_REPAIR': return 3;
     case 'VALIDATING': return 4;
+    case 'DELIVERING': return 5;
     case 'RESOLVED': return 6;
     case 'FAILED': return 4;
   }

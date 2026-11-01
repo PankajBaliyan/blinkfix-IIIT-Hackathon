@@ -214,6 +214,11 @@ class GitHubClient:
         )
         return {"number": data["number"], "url": data["html_url"], "branch": head}
 
+    async def get_pull_state(self, number: int) -> str:
+        """'open', 'closed' or 'merged'."""
+        data = await self.request("GET", f"/repos/{repo_slug()}/pulls/{number}")
+        return "merged" if data.get("merged") else data["state"]
+
     async def viewer_login(self, token: str) -> str:
         """Who a token belongs to. Used right after the OAuth login."""
         client = await self._client()

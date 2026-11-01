@@ -44,6 +44,8 @@ class Settings:
     GITHUB_CLIENT_SECRET: str = os.getenv("GITHUB_CLIENT_SECRET", "")
     GITHUB_REDIRECT_URI: str = os.getenv("GITHUB_REDIRECT_URI", "http://localhost:8000/api/github/callback")
     GITHUB_OAUTH_SCOPE: str = os.getenv("GITHUB_OAUTH_SCOPE", "repo")
+    # Open a draft pull request by itself once a fix is verified. If off, use the button on the Fix page.
+    AUTO_OPEN_PR: bool = os.getenv("AUTO_OPEN_PR", "true").lower() in ("true", "1", "yes")
     # Optional fallback if you would rather use a personal access token than the OAuth login.
     GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")
     # Where the browser is sent back to after connecting GitHub.

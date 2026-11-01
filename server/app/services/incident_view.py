@@ -78,6 +78,8 @@ def build_incident_detail(incident_id: str) -> Optional[Dict[str, Any]]:
         ],
         # The snippet saved when the incident was handled, so it shows the code Blinkfix actually read.
         "source": stored_source or read_source_snippet(row["file"], row["line"]),
+        "validation": _loads(row.get("validation_json"), None),
+        "prNote": row.get("pr_note"),
         "codeOrigin": row.get("code_origin"),
         "codeNote": (stored_source or {}).get("note"),
         "pr": (

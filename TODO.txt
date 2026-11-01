@@ -37,15 +37,15 @@ A. REAL AI (biggest gap)
 
 B. REAL VALIDATION OF PATCHES
 -----------------------------
-[ ] B1. Apply each patch to a temporary copy of the source file and run it
+[x] B1. Apply each patch to a temporary copy of the source file and run it  (DONE: sandbox copy, service must still load)
         Check that the file still imports and the syntax is valid on the real file,
         not just on the snippet.
-[ ] B2. Run real tests against each patch
+[x] B2. Run real tests against each patch  (DONE: server/tests, standard unittest, 5 tests)
         Write a small test suite for the demo service (pytest) and run it per
         candidate in isolation, then report real pass counts.
-[ ] B3. Replay the crashing request against the patched code
+[x] B3. Replay the crashing request against the patched code  (DONE: body captured with secrets masked)
         Prove the fix removes the original error.
-[ ] B4. Score patches on real data (tests passed, lines changed, risk)
+[x] B4. Score patches on real data (tests passed, lines changed, risk)  (DONE)
         instead of the current formula over canned strings.
 
 
@@ -131,7 +131,7 @@ H. HOUSEKEEPING
 
 NEW ITEMS FROM THE CEREBRAS WORK
 --------------------------------
-[ ] B5. Do not trust the model's own confidence to pick the winner
+[x] B5. Do not trust the model's own confidence to pick the winner  (DONE: confidence is now only a tie-breaker)
         In a real run, a patch that still crashes ((currency or {})["exchange_rate"]
         raises KeyError) scored the same as the good ones. B1 + B3 (apply the patch,
         replay the crashing request) are now the most important missing piece.
@@ -163,10 +163,10 @@ NOTES ON A1/A2 (what exists now)
 
 NEW ITEMS FROM THE GITHUB / CODEX WORK
 --------------------------------------
-[ ] G7. Connect GitHub for real and run the whole flow
+[x] G7. Connect GitHub for real and run the whole flow  (DONE: blame works, test PR #1 opened as pankajdev90; close PR #1 and delete its branch)
         Needs the OAuth App (client id + secret in server/.env), then Settings > Connect GitHub.
         Then check git blame appears, and open one real pull request.
-[ ] A9. Run the Codex agent against the real OpenAI API
+[x] A9. Run the Codex agent against the real OpenAI API  (DONE: gpt-5.3-codex, ~15 s per incident, worked first time)
         The tool loop is tested against a scripted stand-in only. Needs OPENAI_API_KEY and
         CODEX_MODEL in server/.env. The request shape may need small fixes on first real use.
 [ ] C5. Revoke the OAuth grant on GitHub when the user clicks Disconnect
@@ -177,6 +177,33 @@ NEW ITEMS FROM THE GITHUB / CODEX WORK
 [ ] D6. Allow a different repository and service path per incident
         Today one repository and one path prefix are configured for everything.
 [ ] E9. Delete leftover test incidents from the database
+
+NEW ITEMS FROM THE VALIDATION WORK
+----------------------------------
+[ ] B6. Write more tests for the demo service (the Stripe route and edge cases)
+        Only 5 tests exist, so a fix that breaks something untested still passes.
+[ ] B7. Use a stronger sandbox
+        Fixes run in a separate process in a throwaway folder with a clean environment, and are
+        blocked from imports, file access and reflection tricks. They are NOT isolated from the
+        network or the machine. A container would be the next step before this runs on a shared server.
+[ ] B8. Validate services that are not in this repository
+        It needs a local copy of the service and a replayable route. Other services fall back to
+        syntax-only checks.
+[ ] B9. Check the fix's behaviour, not just "no crash"
+        A fix that swallows the error and returns nothing passes the replay. A human still has to
+        judge whether the new behaviour is right.
+[ ] B10. Keep the request body only when it is safe
+        Bodies are kept (secrets masked by key name) so a crash can be replayed. Decide what the
+        real retention rules should be.
+
+AUTOMATIC PULL REQUESTS (done)
+------------------------------
+[x] After a verified fix, a draft PR opens by itself (AUTO_OPEN_PR=true in server/.env).
+    - Only verified fixes (crash replayed and gone, all tests pass) open a PR automatically.
+    - An identical fix that already has an open PR is linked instead of opening another one.
+    - If nothing opens, the reason is saved and shown (no GitHub login, unverified fix, ...).
+[ ] C8. Group repeated crashes into one incident (same as D2). Each curl still makes a new
+        incident, and different-but-valid fixes each get their own PR.
 
 SUGGESTED ORDER
 ---------------
