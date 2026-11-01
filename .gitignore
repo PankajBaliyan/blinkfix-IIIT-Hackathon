@@ -98,3 +98,4 @@ server/data/*.db-wal
 tmp/
 temp/
 
+docs/*
