@@ -162,9 +162,6 @@ infrastructure stop, durable SSE replay, restart recovery, missing credentials,
 provider failures and publication gates. Provider and GitHub HTTP tests use
 mock transports: they validate request/response behavior and commit-before-PR
 ordering, not live provider availability or a real GitHub write.
-Saved output from the verification run is in
-[pipeline test evidence](server/evidence/pipeline-tests.txt).
-
 API request example: `POST /api/incidents/simulate` with
 `{"scenarioId":"payments-typeerror","mode":"fixture","publish":false}`.
 `source` optionally supplies a full replacement input file for reproduction;
