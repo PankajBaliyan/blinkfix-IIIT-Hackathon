@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from ..config import settings
 from ..database import get_connection
+from ..services.github_client import get_token
 
 router = APIRouter(tags=["health"])
 
@@ -29,8 +30,14 @@ async def health_check():
             "model": settings.CEREBRAS_MODEL,
         },
         "github": {
-            "configured": bool(settings.GITHUB_TOKEN),
+            "configured": get_token() is not None,
+            "oauth_configured": bool(settings.GITHUB_CLIENT_ID and settings.GITHUB_CLIENT_SECRET),
             "repo": f"{settings.GITHUB_OWNER}/{settings.GITHUB_REPO}",
+        },
+        "codex": {
+            "configured": bool(settings.OPENAI_API_KEY and settings.CODEX_MODEL),
+            "model": settings.CODEX_MODEL or None,
+            "key_set": bool(settings.OPENAI_API_KEY),
         },
         "demo_mode": settings.DEMO_MODE,
     }

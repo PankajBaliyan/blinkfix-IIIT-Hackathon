@@ -6,11 +6,16 @@ from ..models.schemas import CrashPayload
 from .log_store import format_log_line
 
 # Anything that could close or fake one of our own tags is stripped from untrusted text.
-_TAG = re.compile(r"</?\s*(evidence|incident|stack_trace|source|logs|recent_commits|imports)\b[^>]*>", re.I)
+_TAG = re.compile(r"</?\s*(evidence|incident|stack_trace|source|logs|recent_commits|imports|repository|blame)\b[^>]*>", re.I)
 
 
 def _clean(text: Optional[str]) -> str:
     return _TAG.sub("[tag removed]", text or "")
+
+
+def _commit_line(c: Dict[str, Any]) -> str:
+    pr = f"PR #{c['prNumber']}" if c.get("prNumber") else "no PR"
+    return f"{c.get('hash')} | {c.get('author')} | {(c.get('timestamp') or '')[:10]} | {pr} | {_clean(c.get('message'))}"
 
 
 @dataclass
@@ -32,6 +37,8 @@ class Evidence:
     imports: List[str] = field(default_factory=list)
     # Set when the agents share one model call instead of making their own.
     shared: Optional[SharedTriage] = None
+    # Where the source came from: "github" or "local".
+    code_origin: Optional[str] = None
 
     def render(self) -> str:
         p = self.payload
@@ -65,14 +72,22 @@ class Evidence:
                 parts.append(f"{'>' if mine else ' '} {_clean(format_log_line(row))}")
             parts.append("</logs>")
 
+        repo = self.context.get("repository")
+        if repo:
+            head = (self.context.get("deployment") or {}).get("headSha")
+            parts.append(f"<repository>{repo} on {self.context.get('branch')}" + (f" (head {head})" if head else "") + "</repository>")
+        github = self.context.get("github") or {}
+        if github.get("notes"):
+            parts.append("<repository>GitHub data missing: " + "; ".join(_clean(n) for n in github["notes"]) + "</repository>")
+
+        blame = self.context.get("blame")
+        if blame:
+            parts += ["<blame>", f"Line {p.line} was last changed by: {_commit_line(blame)}", "</blame>"]
+
         commits = self.context.get("recentCommits", [])[:5]
         if commits:
             parts.append("<recent_commits>")
-            for c in commits:
-                parts.append(
-                    f"{c.get('hash')} | {c.get('author')} | {c.get('timestamp', '')[:10]} | PR #{c.get('prNumber')} | "
-                    f"{_clean(c.get('message'))} | files: {', '.join(c.get('changedFiles', []))}"
-                )
+            parts += [_commit_line(c) for c in commits]
             parts.append("</recent_commits>")
 
         parts.append("</evidence>")

@@ -23,3 +23,8 @@ export function logTime(epochSeconds: number): string {
   const pad = (n: number, size = 2) => String(n).padStart(size, '0');
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
 }
+
+/** "PR #12" when the change came from a pull request, otherwise "commit abc1234". */
+export function commitLabel(commit: { pr_number: number | null; commit_hash: string }): string {
+  return commit.pr_number ? `PR #${commit.pr_number}` : `commit ${commit.commit_hash}`;
+}

@@ -55,3 +55,35 @@ def apply_patch(file: str, line: int, code: str) -> Optional[str]:
     if not 1 <= line <= len(lines):
         return None
     return "\n".join(lines[: line - 1] + code.splitlines() + lines[line:]) + "\n"
+
+
+# ---------- helpers that work on text already in memory (from GitHub or from disk)
+
+def read_file_text(file: str) -> Optional[str]:
+    """The service's own copy of a file, read from disk. None if it is missing or outside the app folder."""
+    try:
+        path = (BASE_DIR / file).resolve()
+        if not path.is_relative_to(APP_DIR) or not path.is_file():
+            return None
+        return path.read_text(encoding="utf-8")
+    except (OSError, ValueError):
+        return None
+
+
+def snippet_from_text(file: str, text: str, line: int, context: int = 4) -> Optional[Dict[str, Any]]:
+    all_lines = text.splitlines()
+    if not 1 <= line <= len(all_lines):
+        return None
+    start = max(1, line - context)
+    end = min(len(all_lines), line + context)
+    return {"file": file, "startLine": start, "failingLine": line, "lines": all_lines[start - 1:end]}
+
+
+def import_lines_from_text(text: str) -> list:
+    return [l for l in text.splitlines() if l.startswith(("import ", "from "))]
+
+
+def replace_lines(text: str, start: int, end: int, code: str) -> str:
+    """The text with lines start..end (1-based, inclusive) replaced by `code`."""
+    lines = text.splitlines()
+    return "\n".join(lines[: start - 1] + code.splitlines() + lines[end:]) + "\n"

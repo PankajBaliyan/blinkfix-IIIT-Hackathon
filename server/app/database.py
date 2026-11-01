@@ -57,6 +57,12 @@ def init_db() -> None:
                     FOREIGN KEY(incident_id) REFERENCES incidents(id)
                 );
 
+                CREATE TABLE IF NOT EXISTS integrations (
+                    key TEXT PRIMARY KEY,
+                    value_json TEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+
                 CREATE TABLE IF NOT EXISTS candidate_patches (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     incident_id TEXT NOT NULL,
@@ -71,6 +77,10 @@ def init_db() -> None:
             _add_missing_columns(conn, "incidents", {
                 "payload_json": "TEXT",
                 "logs_json": "TEXT",
+                "source_json": "TEXT",
+                "code_origin": "TEXT",
+                "pr_number": "INTEGER",
+                "pr_branch": "TEXT",
             })
             _add_missing_columns(conn, "candidate_patches", {
                 "title": "TEXT",
@@ -79,6 +89,10 @@ def init_db() -> None:
                 "validation_json": "TEXT",
                 "source": "TEXT",
                 "model": "TEXT",
+                "original": "TEXT",
+                "file": "TEXT",
+                "start_line": "INTEGER",
+                "end_line": "INTEGER",
             })
         logger.info(f"SQLite database initialized at {settings.DATABASE_PATH}")
     finally:
@@ -93,8 +107,8 @@ def save_incident(incident: Dict[str, Any]) -> None:
                 INSERT OR REPLACE INTO incidents (
                     id, service, error_name, error_message, file, line, status,
                     duration_ms, culprit_commit, winning_patch_id, pr_url, rollback_approved, context_snapshot,
-                    payload_json, logs_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    payload_json, logs_json, source_json, code_origin
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     incident["id"],
@@ -112,6 +126,8 @@ def save_incident(incident: Dict[str, Any]) -> None:
                     json.dumps(incident.get("context_snapshot", {})),
                     incident.get("payload_json"),
                     json.dumps(incident.get("logs", [])),
+                    incident.get("source_json"),
+                    incident.get("code_origin"),
                 ),
             )
     finally:
@@ -187,8 +203,9 @@ def save_patches(incident_id: str, patches: List[Dict[str, Any]]) -> None:
                     """
                     INSERT INTO candidate_patches (
                         incident_id, patch_id, strategy, code, is_winner, validation_score,
-                        title, explanation, confidence, validation_json, source, model
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        title, explanation, confidence, validation_json, source, model,
+                        original, file, start_line, end_line
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         incident_id,
@@ -203,6 +220,10 @@ def save_patches(incident_id: str, patches: List[Dict[str, Any]]) -> None:
                         json.dumps(p.get("validation", {})),
                         p.get("source", "demo"),
                         p.get("model"),
+                        p.get("original", ""),
+                        p.get("file"),
+                        p.get("startLine"),
+                        p.get("endLine"),
                     ),
                 )
     finally:
@@ -226,6 +247,10 @@ def get_patches(incident_id: str) -> List[Dict[str, Any]]:
                 "code": r["code"],
                 "source": r["source"] or "demo",
                 "model": r["model"],
+                "original": r["original"] or "",
+                "file": r["file"],
+                "startLine": r["start_line"],
+                "endLine": r["end_line"],
             }
             for r in rows
         ]
@@ -265,5 +290,34 @@ def list_recent_incidents(limit: int = 50) -> List[Dict[str, Any]]:
             (limit,),
         )
         return [dict(row) for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def save_integration(key: str, value: Dict[str, Any]) -> None:
+    """Stores connection details (for example the GitHub login) in the local database."""
+    conn = get_connection()
+    try:
+        with conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO integrations (key, value_json, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+                (key, json.dumps(value)),
+            )
+    finally:
+        conn.close()
+
+def get_integration(key: str) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT value_json FROM integrations WHERE key = ?", (key,)).fetchone()
+        return json.loads(row["value_json"]) if row else None
+    finally:
+        conn.close()
+
+def delete_integration(key: str) -> None:
+    conn = get_connection()
+    try:
+        with conn:
+            conn.execute("DELETE FROM integrations WHERE key = ?", (key,))
     finally:
         conn.close()

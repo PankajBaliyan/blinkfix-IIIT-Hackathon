@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { GitPullRequest, MessageSquare } from 'lucide-react';
-import { CandidatePatch, IncidentDetail } from '../types';
+import { ExternalLink, GitPullRequest, MessageSquare } from 'lucide-react';
+import { CandidatePatch, GithubStatus, IncidentDetail } from '../types';
+import { openPullRequest } from '../services/incident.api';
 import { Badge, CardHeader, CheckIcon, EmptyState, PageTitle, stageIndex } from '../components/ui';
 import { CodeBlock, DiffView } from '../components/DiffView';
+import { commitLabel } from '../lib/format';
 
 const letter = (p: CandidatePatch) => p.id.replace('patch-', '').toUpperCase();
 
@@ -15,9 +17,20 @@ const testsPass = (s: string) => {
 
 const SUBTITLE = 'Several candidate fixes are written and checked. The best one becomes a pull request.';
 
-export const FixView: React.FC<{ detail: IncidentDetail | null }> = ({ detail }) => {
+interface FixViewProps {
+  detail: IncidentDetail | null;
+  github: GithubStatus | null;
+  onOpenSettings: () => void;
+}
+
+const writtenBy = (p: CandidatePatch) =>
+  p.source === 'codex' ? `Written by ${p.model} (Code Agent)` : p.source === 'cerebras' ? `Written by ${p.model}` : 'Demo library';
+
+export const FixView: React.FC<FixViewProps> = ({ detail, github, onOpenSettings }) => {
   // Reset by the parent via `key={incident id}`, so a pick never leaks between incidents.
   const [pickedId, setPickedId] = useState<string | null>(null);
+  const [opening, setOpening] = useState(false);
+  const [prError, setPrError] = useState<string | null>(null);
 
   if (!detail || (detail.patches.length === 0 && stageIndex(detail.status) < 3)) {
     return (
@@ -53,8 +66,31 @@ export const FixView: React.FC<{ detail: IncidentDetail | null }> = ({ detail })
     detail.patches.find((p) => p.isWinner && resolved) ??
     detail.patches[0];
 
-  const failingLine = detail.source ? detail.source.lines[detail.source.failingLine - detail.source.startLine] : null;
-  const prNumber = detail.prUrl?.match(/\/pull\/(\d+)/)?.[1];
+  const before = selected.original || null;
+
+  // Why a pull request cannot be opened right now, or null if it can.
+  const prBlocker = !github?.connected
+    ? 'Connect GitHub to open a pull request.'
+    : github.canWrite === false
+      ? 'The connected GitHub account cannot push to this repository.'
+      : detail.codeOrigin !== 'github'
+        ? 'This incident\'s code was not read from GitHub, so a pull request cannot be built from it.'
+        : selected.validation.astSyntaxValid
+          ? null
+          : 'This fix does not produce valid code.';
+
+  const openPr = async () => {
+    setOpening(true);
+    setPrError(null);
+    try {
+      await openPullRequest(detail.id, selected.id);
+      // The API pushes the updated incident, which fills in the pull request below.
+    } catch (e) {
+      setPrError(e instanceof Error ? e.message : 'Could not open the pull request.');
+    } finally {
+      setOpening(false);
+    }
+  };
   const checkState = (ok: boolean) => (resolved ? (ok ? 'pass' : 'fail') : 'running') as 'pass' | 'fail' | 'running';
   const testsState = testsRun(selected.validation.unitTestsPassed)
     ? checkState(testsPass(selected.validation.unitTestsPassed))
@@ -117,24 +153,24 @@ export const FixView: React.FC<{ detail: IncidentDetail | null }> = ({ detail })
               hint={selected.explanation}
               right={
                 <div className="flex flex-wrap justify-end gap-1.5">
-                  <Badge tone={selected.source === 'cerebras' ? 'accent' : 'neutral'}>
-                    {selected.source === 'cerebras' ? `Written by ${selected.model}` : 'Demo library'}
-                  </Badge>
+                  <Badge tone={selected.source === 'demo' ? 'neutral' : 'accent'}>{writtenBy(selected)}</Badge>
                   {resolved && selected.isWinner && <Badge tone="ok">Best fix</Badge>}
                 </div>
               }
             />
             <div className="space-y-5 p-5">
-              {failingLine !== null && (
+              {before !== null ? (
                 <div>
                   <h3 className="mb-2 text-sm font-semibold">What changes</h3>
                   <p className="mb-2 text-xs text-muted">
-                    Replaces line {detail.error.line} of <span className="font-mono">{detail.error.file}</span>.
+                    Replaces {selected.startLine === selected.endLine ? `line ${selected.startLine}` : `lines ${selected.startLine} to ${selected.endLine}`} of{' '}
+                    <span className="font-mono">{selected.file ?? detail.error.file}</span>.
                   </p>
-                  <DiffView before={failingLine} after={selected.code} />
+                  <DiffView before={before} after={selected.code} />
                 </div>
+              ) : (
+                <CodeBlock code={selected.code} />
               )}
-              {failingLine === null && <CodeBlock code={selected.code} />}
               <div>
                 <h3 className="text-sm font-semibold">Checks</h3>
                 <ul className="mt-2 divide-y divide-line rounded-md border border-line">
@@ -149,9 +185,9 @@ export const FixView: React.FC<{ detail: IncidentDetail | null }> = ({ detail })
                 {resolved && (
                   <p className="mt-3 text-sm text-muted">
                     Score <span className="font-semibold text-ink">{selected.validation.score}</span> out of 100.{' '}
-                    {selected.source === 'cerebras'
-                      ? <>The model rated its own confidence at <span className="font-semibold text-ink">{Math.round(selected.confidence * 100)}%</span>. Tests have not been run, so check the fix before merging.</>
-                      : 'These fixes and their test results come from the built-in demo library.'}
+                    {selected.source === 'demo'
+                      ? 'This fix comes from the built-in demo library, not a model. Tests have not been run.'
+                      : <>The model rated its own confidence at <span className="font-semibold text-ink">{Math.round(selected.confidence * 100)}%</span>. Tests have not been run, so check the fix before merging.</>}
                   </p>
                 )}
               </div>
@@ -161,21 +197,40 @@ export const FixView: React.FC<{ detail: IncidentDetail | null }> = ({ detail })
           {resolved && (
             <section className="card">
               <CardHeader
-                title="Sent to your team"
-                hint={detail.demoMode ? 'Demo mode: these are simulated, nothing was created on GitHub or Slack.' : 'A person reviews and merges. Nothing is deployed automatically.'}
+                title="Pull request"
+                hint="Opens a draft pull request on GitHub. Nothing is merged or deployed automatically."
               />
               <div className="divide-y divide-line">
-                <div className="flex items-start gap-3 px-5 py-4">
+                <div className="flex flex-wrap items-start gap-3 px-5 py-4">
                   <GitPullRequest size={18} className="mt-0.5 shrink-0 text-accent" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold">Draft pull request{prNumber ? ` #${prNumber}` : ''}</p>
-                    <p className="mt-0.5 truncate text-sm text-muted">Fix {detail.error.type} in {detail.error.file}</p>
-                    {detail.prUrl && <p className="mt-1 truncate font-mono text-xs text-faint">{detail.prUrl}</p>}
-                  </div>
-                  {detail.demoMode ? (
-                    <Badge tone="neutral">Simulated</Badge>
+                  {detail.pr ? (
+                    <>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold">Draft pull request{detail.pr.number ? ` #${detail.pr.number}` : ''} opened</p>
+                        <p className="mt-0.5 truncate text-sm text-muted">Fix {detail.error.type} in {detail.error.file}</p>
+                        {detail.pr.branch && <p className="mt-1 truncate font-mono text-xs text-faint">{detail.pr.branch}</p>}
+                      </div>
+                      <a href={detail.pr.url} target="_blank" rel="noreferrer" className="btn shrink-0">
+                        Open on GitHub <ExternalLink size={14} />
+                      </a>
+                    </>
                   ) : (
-                    detail.prUrl && <a href={detail.prUrl} target="_blank" rel="noreferrer" className="btn shrink-0">Open</a>
+                    <>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold">Open a pull request with candidate {letter(selected)}</p>
+                        <p className="mt-0.5 text-sm text-muted">
+                          {prBlocker ?? 'Creates a branch, commits this one change, and opens a draft pull request on GitHub.'}
+                        </p>
+                        {prError && <p role="alert" className="mt-2 text-sm text-bad">{prError}</p>}
+                      </div>
+                      {github?.connected ? (
+                        <button className="btn btn-primary shrink-0" onClick={openPr} disabled={opening || prBlocker !== null}>
+                          {opening ? 'Opening…' : 'Open pull request'}
+                        </button>
+                      ) : (
+                        <button className="btn shrink-0" onClick={onOpenSettings}>Go to Settings</button>
+                      )}
+                    </>
                   )}
                 </div>
                 <div className="flex items-start gap-3 px-5 py-4">
@@ -183,8 +238,9 @@ export const FixView: React.FC<{ detail: IncidentDetail | null }> = ({ detail })
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold">Slack message</p>
                     <p className="mt-1 text-sm text-muted">
-                      {detail.error.type} in {detail.service}
-                      {detail.culprit ? `. Introduced by PR #${detail.culprit.pr_number} from ${detail.culprit.author}` : ''}. A proposed fix is ready for review.
+                      {detail.pr
+                        ? `${detail.error.type} in ${detail.service}${detail.culprit ? `. Introduced by ${commitLabel(detail.culprit)} from ${detail.culprit.author}` : ''}. A proposed fix is ready for review.`
+                        : 'Sent when a pull request is opened.'}
                     </p>
                   </div>
                   {detail.demoMode && <Badge tone="neutral">Simulated</Badge>}

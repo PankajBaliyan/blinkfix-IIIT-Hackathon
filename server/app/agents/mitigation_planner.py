@@ -2,7 +2,7 @@ import asyncio
 from typing import Dict, Any, List
 from .base import BaseAgent, text_field
 from ..models.schemas import CrashPayload
-from ..services.diagnosis import find_culprit_commit, is_external_failure
+from ..services.diagnosis import commit_label, find_culprit_commit, is_external_failure
 from ..services.evidence import Evidence
 
 RISKS = {"LOW", "MEDIUM", "HIGH"}
@@ -24,7 +24,7 @@ class MitigationPlanner(BaseAgent):
         self, payload: CrashPayload, context: Dict[str, Any], logs: List[str], evidence: Evidence
     ) -> Dict[str, Any]:
         culprit = find_culprit_commit(context, payload.file)
-        pr = culprit.get("prNumber", 0)
+        pr = culprit.get("prNumber")
         answer = await self.ask(evidence, logs)
 
         action = text_field(answer, "action", 160) if answer else None
@@ -44,17 +44,21 @@ class MitigationPlanner(BaseAgent):
                 },
             }
 
-        # Built-in demo analysis
-        await asyncio.sleep(0.31)
+        # Built-in analysis
+        await asyncio.sleep(0.2)
         if is_external_failure(payload):
             # A rollback cannot fix someone else's outage.
-            action = "Fail over to the backup payment provider"
-            description = "The payment provider is timing out, so rolling back our code would not help. Route charges to the secondary processor until it recovers."
+            action = "Fail over to a backup provider"
+            description = "An outside service is timing out, so rolling back our code would not help. Route traffic to a backup until it recovers."
             risk = "MEDIUM"
-        else:
-            action = f"Roll back to the previous deployment (revert PR #{pr})"
+        elif culprit["hash"] != "unknown":
+            action = f"Roll back the change that introduced this ({commit_label(culprit)})"
             description = f"Reverts commit {culprit.get('hash')} to restore the last version that worked."
             risk = "LOW"
+        else:
+            action = "Disable or rate-limit the failing endpoint"
+            description = "The cause could not be traced to a recent change, so limit the damage while an engineer investigates."
+            risk = "MEDIUM"
         self.note(logs, f"Safe mitigation generated: {action}.")
         return {
             "summary": f"Recommendation: {action} ({risk} risk). Awaiting approval.",

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Activity, Bug, ChevronDown, GitCommit, Server, ShieldAlert } from 'lucide-react';
+import { Activity, Bug, ChevronDown, Code2, GitCommit, Server, ShieldAlert } from 'lucide-react';
 import { AgentRun, IncidentDetail } from '../types';
 import { Badge, CardHeader, CheckIcon, EmptyState, PageTitle, Tone } from '../components/ui';
 import { isActive } from '../hooks/useIncidents';
@@ -11,6 +11,8 @@ const AGENTS: { name: string; icon: React.ElementType; question: string }[] = [
   { name: 'Impact Analyst', icon: Activity, question: 'Who and what is affected?' },
   { name: 'Mitigation Planner', icon: ShieldAlert, question: 'What is the safest way to stop it now?' },
 ];
+
+const CODE_AGENT: (typeof AGENTS)[number] = { name: 'Code Agent', icon: Code2, question: 'What does the code in the repository say, and what is the fix?' };
 
 const depTone = { HEALTHY: 'ok', DEGRADED: 'warn', DOWN: 'bad' } as const;
 const depLabel = { HEALTHY: 'Healthy', DEGRADED: 'Slow', DOWN: 'Down' } as const;
@@ -62,7 +64,9 @@ const AgentRow: React.FC<{
             <span className="tabular text-right text-xs text-muted" title={run.findings.source === 'cerebras' && run.findings.sharedCall ? 'The five agents share one model call' : undefined}>
               {run.findings.source === 'cerebras'
                 ? `${run.findings.model}, ${run.findings.modelLatencyMs} ms${run.findings.sharedCall ? ' (shared call)' : ''}`
-                : 'Demo analysis'}
+                : run.findings.source === 'codex'
+                  ? `${run.findings.model}, ${run.findings.files_read?.length ?? 0} file(s) read, ${(run.durationMs / 1000).toFixed(1)} s`
+                  : 'Demo analysis'}
             </span>
           )}
         </div>
@@ -88,7 +92,8 @@ export const InvestigationView: React.FC<{ detail: IncidentDetail | null }> = ({
 
   const working = isActive(detail.status);
   const runs = new Map(detail.agents.map((a) => [a.name, a]));
-  const finished = AGENTS.filter((a) => runs.has(a.name)).length;
+  const roster = runs.has(CODE_AGENT.name) ? [...AGENTS, CODE_AGENT] : AGENTS;
+  const finished = roster.filter((a) => runs.has(a.name)).length;
   const services = detail.infra?.services ?? [];
   const routes = detail.impact?.affected_routes ?? [];
 
@@ -97,7 +102,7 @@ export const InvestigationView: React.FC<{ detail: IncidentDetail | null }> = ({
       <PageTitle
         title="Investigation"
         subtitle={subtitle}
-        right={<Badge tone={finished === AGENTS.length ? 'ok' : 'accent'}>{finished} of {AGENTS.length} finished</Badge>}
+        right={<Badge tone={finished === roster.length ? 'ok' : 'accent'}>{finished} of {roster.length} finished</Badge>}
       />
 
       <section className="card">
@@ -106,7 +111,7 @@ export const InvestigationView: React.FC<{ detail: IncidentDetail | null }> = ({
           hint={`For ${detail.error.type} on ${detail.error.method} ${detail.error.route}. They run in parallel, so it takes as long as the slowest one.`}
         />
         <ul className="divide-y divide-line">
-          {AGENTS.map((meta) => (
+          {roster.map((meta) => (
             <AgentRow key={meta.name} meta={meta} run={runs.get(meta.name)} working={working} />
           ))}
         </ul>

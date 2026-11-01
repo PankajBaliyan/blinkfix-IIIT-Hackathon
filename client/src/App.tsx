@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useIncidents } from './hooks/useIncidents';
 import { useTheme } from './hooks/useTheme';
+import { useGithub } from './hooks/useGithub';
 import { Sidebar, Page } from './components/Sidebar';
 import { IncidentView } from './views/IncidentView';
 import { InvestigationView } from './views/InvestigationView';
@@ -11,7 +12,9 @@ import { SettingsView } from './views/SettingsView';
 export default function App() {
   const incidents = useIncidents();
   const { theme, setTheme } = useTheme();
-  const [page, setPage] = useState<Page>('incident');
+  const github = useGithub();
+  // Coming back from GitHub's login, land on Settings so the result is visible.
+  const [page, setPage] = useState<Page>(github.loginResult ? 'settings' : 'incident');
 
   // Keeps "2 min ago" labels fresh. Local clock only, no network.
   const [, setTick] = useState(0);
@@ -49,7 +52,7 @@ export default function App() {
           />
         )}
         {page === 'investigation' && <InvestigationView detail={detail} />}
-        {page === 'fix' && <FixView key={detail?.id ?? 'none'} detail={detail} />}
+        {page === 'fix' && <FixView key={detail?.id ?? 'none'} detail={detail} github={github.status} onOpenSettings={() => setPage('settings')} />}
         {page === 'history' && (
           <HistoryView
             list={list}
@@ -60,7 +63,16 @@ export default function App() {
             }}
           />
         )}
-        {page === 'settings' && <SettingsView theme={theme} onSetTheme={setTheme} online={online} />}
+        {page === 'settings' && (
+          <SettingsView
+            theme={theme}
+            onSetTheme={setTheme}
+            online={online}
+            github={github.status}
+            githubResult={github.loginResult}
+            onDisconnectGithub={github.disconnect}
+          />
+        )}
       </main>
     </div>
   );

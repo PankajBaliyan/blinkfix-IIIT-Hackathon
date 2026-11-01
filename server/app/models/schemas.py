@@ -45,8 +45,13 @@ class CandidatePatch(BaseModel):
     isWinner: bool = False
     validation: PatchValidation = Field(default_factory=PatchValidation)
     code: str
-    source: str = "demo"
+    source: str = "demo"  # "cerebras", "codex" or "demo"
     model: Optional[str] = None
+    # The lines this patch replaces, in the failing file.
+    original: str = ""
+    file: Optional[str] = None
+    startLine: Optional[int] = None
+    endLine: Optional[int] = None
 
 class RollbackApprovalRequest(BaseModel):
     approvedBy: str = "sre-engineer"

@@ -1,5 +1,7 @@
 import uuid
 import asyncio
+from typing import Optional
+from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from ..models.schemas import (
     SimulateRequest,
@@ -11,6 +13,8 @@ from ..services.log_store import log_store
 from ..services.incident_console import print_crash_report
 from ..database import get_incident, update_incident
 from ..services.incident_events import publish_incident_update
+from ..services.pull_request import PullRequestError, create_pull_request
+from ..database import get_integration
 from ..services.incident_view import build_incident_detail, list_incident_summaries
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
@@ -81,6 +85,20 @@ async def approve_rollback(incident_id: str, request: RollbackApprovalRequest):
         "approved_by": request.approvedBy,
         "action": "Dispatched Kubernetes deployment rollback to v1.0.3",
     }
+
+class PullRequestRequest(BaseModel):
+    patchId: Optional[str] = None
+
+
+@router.post("/{incident_id}/pull-request")
+async def open_pull_request(incident_id: str, request: PullRequestRequest):
+    """Opens a draft pull request on GitHub with the chosen fix (the best one by default)."""
+    login = (get_integration("github") or {}).get("login")
+    try:
+        return await create_pull_request(incident_id, request.patchId, login)
+    except PullRequestError as e:
+        raise HTTPException(status_code=e.status, detail=e.message)
+
 
 @router.get("/")
 async def get_recent_incidents(limit: int = 50):

@@ -51,11 +51,11 @@ B. REAL VALIDATION OF PATCHES
 
 C. REAL GITHUB AND SLACK
 ------------------------
-[ ] C1. Open a real draft pull request with the winning patch applied
+[x] C1. Open a real draft pull request with the winning patch applied  (DONE: button on the Fix page; logic tested with GitHub writes recorded, not yet against GitHub itself)
         Needs a GitHub token and a target repository. Create the branch, commit
         the changed file and open the draft PR.
 [ ] C2. Send a real Slack message with a link to the pull request
-[ ] C3. Let the UI link to the real PR and show its status
+[x] C3. Let the UI link to the real PR  (DONE; live PR status is not shown yet)
 [ ] C4. Make the "Approve action" button actually do something
         Right now it only records the approval. Decide what a rollback or
         failover should trigger.
@@ -71,7 +71,7 @@ D. DETECTION AND INGESTION
 [ ] D3. Also detect failing responses that do not raise an error (5xx, very slow)
 [ ] D4. Read logs from a real source instead of the in-memory buffer
         For example a log file, Loki or CloudWatch.
-[ ] D5. Detect the culprit commit from real git history
+[x] D5. Detect the culprit commit from real git history  (DONE: commit history always; git blame once GitHub is connected)
         Replace the fixed commit data with `git log` and `git blame` on the
         failing file and line.
 
@@ -160,6 +160,23 @@ NOTES ON A1/A2 (what exists now)
 - Patches are checked by applying them to the real file and parsing the result.
   Tests are NOT run ("not run" in the UI) until B2/B3 are built.
 
+
+NEW ITEMS FROM THE GITHUB / CODEX WORK
+--------------------------------------
+[ ] G7. Connect GitHub for real and run the whole flow
+        Needs the OAuth App (client id + secret in server/.env), then Settings > Connect GitHub.
+        Then check git blame appears, and open one real pull request.
+[ ] A9. Run the Codex agent against the real OpenAI API
+        The tool loop is tested against a scripted stand-in only. Needs OPENAI_API_KEY and
+        CODEX_MODEL in server/.env. The request shape may need small fixes on first real use.
+[ ] C5. Revoke the OAuth grant on GitHub when the user clicks Disconnect
+        Today Disconnect only forgets the token locally.
+[ ] C6. Store the GitHub token encrypted
+        It is kept as plain text in the local SQLite file (gitignored).
+[ ] C7. Make the Codex fix able to change more than one file
+[ ] D6. Allow a different repository and service path per incident
+        Today one repository and one path prefix are configured for everything.
+[ ] E9. Delete leftover test incidents from the database
 
 SUGGESTED ORDER
 ---------------

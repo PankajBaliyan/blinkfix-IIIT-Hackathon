@@ -12,8 +12,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..agents.base import SYSTEM_PROMPT
 from ..models.schemas import CandidatePatch, CrashPayload, PatchValidation
 from .cerebras_service import cerebras_client
+from .code_source import SourceFile
 from .evidence import Evidence
-from .source_reader import read_failing_line
 
 logger = logging.getLogger("blinkfix.patches")
 
@@ -116,7 +116,7 @@ def _clean_code(raw: Any, indent: str) -> Optional[str]:
     return _indent("\n".join(lines), indent)
 
 
-def _patches_from_model(data: Dict[str, Any], failing_line: str, model: str) -> List[CandidatePatch]:
+def _patches_from_model(data: Dict[str, Any], failing_line: str, model: str, source: SourceFile) -> List[CandidatePatch]:
     items = data.get("patches")
     if not isinstance(items, list):
         return []
@@ -157,13 +157,17 @@ def _patches_from_model(data: Dict[str, Any], failing_line: str, model: str) -> 
             code=code,
             source="cerebras",
             model=model,
+            original=failing_line,
+            file=source.file,
+            startLine=source.line,
+            endLine=source.line,
         ))
         if len(patches) == 5:
             break
     return patches
 
 
-def _library_patches(payload: CrashPayload, failing_line: Optional[str]) -> List[CandidatePatch]:
+def _library_patches(payload: CrashPayload, failing_line: Optional[str], source: SourceFile) -> List[CandidatePatch]:
     indent = _indent_of(failing_line) if failing_line else ""
     patches = []
     for pid, strategy, explanation, confidence, tests, code in _specs_for(payload, failing_line):
@@ -177,18 +181,23 @@ def _library_patches(payload: CrashPayload, failing_line: Optional[str]) -> List
             validation=PatchValidation(
                 targetFileMatch=True,
                 astSyntaxValid=True,
-                unitTestsPassed=tests,
+                unitTestsPassed="not run",
                 diffLineChange=f"+{len(replacement.splitlines())} / -1 lines",
                 score=0,
             ),
             code=replacement,
             source="demo",
+            original=failing_line or "",
+            file=source.file,
+            startLine=source.line,
+            endLine=source.line,
         ))
     return patches
 
 
-async def build_candidate_patches(payload: CrashPayload, evidence: Evidence) -> List[CandidatePatch]:
-    failing_line = read_failing_line(payload.file, payload.line)
+async def build_candidate_patches(payload: CrashPayload, evidence: Evidence, source: SourceFile) -> List[CandidatePatch]:
+    lines = source.text.splitlines()
+    failing_line = lines[source.line - 1] if 1 <= source.line <= len(lines) else None
 
     if failing_line and cerebras_client.enabled:
         reply = await cerebras_client.complete_json(
@@ -198,7 +207,7 @@ async def build_candidate_patches(payload: CrashPayload, evidence: Evidence) -> 
             max_tokens=3000,
         )
         if reply.data is not None:
-            patches = _patches_from_model(reply.data, failing_line, reply.model)
+            patches = _patches_from_model(reply.data, failing_line, reply.model, source)
             if patches:
                 logger.info("%s wrote %d candidate fixes in %d ms", reply.model, len(patches), reply.latency_ms)
                 return patches
@@ -206,4 +215,4 @@ async def build_candidate_patches(payload: CrashPayload, evidence: Evidence) -> 
         else:
             logger.warning("Model call failed (%s); using the built-in library", reply.error)
 
-    return _library_patches(payload, failing_line)
+    return _library_patches(payload, failing_line, source)

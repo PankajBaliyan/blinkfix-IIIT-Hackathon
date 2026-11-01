@@ -5,7 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .database import init_db
 from .services.cerebras_service import cerebras_client
-from .routes import incident, stream, health
+from .services.github_client import github_client
+from .routes import incident, stream, health, github
 from .demo_service import checkout
 from .services.crash_detector import CrashDetectionMiddleware
 
@@ -25,6 +26,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down Blinkfix Swarm Zero API server...")
     await cerebras_client.close()
+    await github_client.close()
 
 app = FastAPI(
     title="Blinkfix // Swarm Zero Autonomous Incident API",
@@ -50,6 +52,7 @@ app.include_router(health.router)
 app.include_router(incident.router)
 app.include_router(stream.router)
 app.include_router(stream.events_router)
+app.include_router(github.router)
 app.include_router(checkout.router)
 
 @app.get("/")
@@ -65,6 +68,8 @@ async def root():
             "GET  /api/incidents/{incident_id}",
             "GET  /api/incidents/{incident_id}/stream (SSE)",
             "GET  /api/events (SSE, all incident updates)",
+            "POST /api/incidents/{incident_id}/pull-request",
+            "GET  /api/github/status, /api/github/login, POST /api/github/disconnect",
             "POST /api/incidents/{incident_id}/rollback",
             "GET  /api/health",
             "POST /api/demo/checkout (buggy: TypeError)",

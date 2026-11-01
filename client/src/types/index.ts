@@ -23,6 +23,7 @@ export interface IncidentSummary {
   durationMs: number;
   rollbackApproved: boolean;
   prUrl: string | null;
+  prNumber: number | null;
 }
 
 export interface AgentRun {
@@ -51,9 +52,14 @@ export interface CandidatePatch {
   isWinner: boolean;
   validation: PatchValidation;
   code: string;
-  /** Who wrote it: the AI model, or the built-in demo library. */
-  source: 'cerebras' | 'demo';
+  /** Who wrote it: a model (Cerebras or the Codex agent), or the built-in demo library. */
+  source: 'cerebras' | 'codex' | 'demo';
   model: string | null;
+  /** The lines this fix replaces, and where they are. */
+  original: string;
+  file: string | null;
+  startLine: number | null;
+  endLine: number | null;
 }
 
 export interface LogLine {
@@ -68,6 +74,8 @@ export interface SourceSnippet {
   startLine: number;
   failingLine: number;
   lines: string[];
+  origin?: 'github' | 'local';
+  repoPath?: string;
 }
 
 export interface OutsideService {
@@ -94,13 +102,18 @@ export interface IncidentDetail extends IncidentSummary {
   };
   logs: LogLine[];
   source: SourceSnippet | null;
+  /** Where the code was read from: GitHub, or the local copy when GitHub could not be used. */
+  codeOrigin: 'github' | 'local' | null;
+  codeNote: string | null;
+  pr: { number: number | null; url: string; branch: string | null } | null;
   agents: AgentRun[];
   culprit: {
     commit_hash: string;
     author: string;
-    pr_number: number;
+    pr_number: number | null;
     message: string | null;
     committed_at: string | null;
+    url?: string | null;
   } | null;
   impact: {
     scope: string;
@@ -117,7 +130,7 @@ export interface IncidentDetail extends IncidentSummary {
   mitigation: {
     action: string;
     description: string;
-    target_pr: number;
+    target_pr: number | null;
     risk_level: 'LOW' | 'MEDIUM' | 'HIGH';
   } | null;
   patches: CandidatePatch[];
@@ -128,5 +141,19 @@ export interface Health {
   version: string;
   demo_mode: boolean;
   cerebras: { configured: boolean; model: string };
-  github: { configured: boolean; repo: string };
+  github: { configured: boolean; oauth_configured: boolean; repo: string };
+  codex: { configured: boolean; model: string | null; key_set: boolean };
+}
+
+export interface GithubStatus {
+  oauthConfigured: boolean;
+  connected: boolean;
+  via: 'login' | 'token' | null;
+  login: string | null;
+  repo: string;
+  branch: string;
+  pathPrefix: string;
+  callbackUrl: string;
+  canWrite: boolean | null;
+  problem: string | null;
 }

@@ -8,17 +8,23 @@ def is_external_failure(payload: CrashPayload) -> bool:
     return any(word in text for word in ("ConnectionError", "Timeout", "timed out"))
 
 
-def find_culprit_commit(context: Dict[str, Any], file: str) -> Dict[str, Any]:
-    """The most recent commit that touched the failing file, or the latest commit if none did."""
+def commit_label(commit: Dict[str, Any]) -> str:
+    """'PR #12' when the commit came from a pull request, otherwise 'commit abc1234'."""
+    return f"PR #{commit['prNumber']}" if commit.get("prNumber") else f"commit {commit.get('hash', 'unknown')}"
+
+
+def find_culprit_commit(context: Dict[str, Any], file: str = "") -> Dict[str, Any]:
+    """The commit that last changed the failing line (git blame), else the newest commit on the file."""
+    if context.get("blame"):
+        return context["blame"]
     commits = context.get("recentCommits", [])
-    for commit in commits:
-        if file in commit.get("changedFiles", []):
-            return commit
-    return commits[0] if commits else {
+    if commits:
+        return commits[0]
+    return {
         "hash": "unknown",
         "author": "unknown",
-        "message": "No recent commits found",
-        "prNumber": 0,
+        "message": "No commit history available (GitHub is not connected or could not be reached)",
+        "prNumber": None,
     }
 
 

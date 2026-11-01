@@ -8,6 +8,7 @@ import { TriggerHelp } from '../components/TriggerHelp';
 import { Badge, CardHeader, Fact, PageTitle, statusInfo } from '../components/ui';
 import { isActive } from '../hooks/useIncidents';
 import { API_BASE } from '../services/incident.api';
+import { commitLabel } from '../lib/format';
 import { clockTime, logTime, seconds, timeAgo } from '../lib/format';
 
 interface IncidentViewProps {
@@ -169,7 +170,7 @@ export const IncidentView: React.FC<IncidentViewProps> = ({
               <Fact label="Request ID" mono>{detail.error.requestId ?? 'none'}</Fact>
               {detail.culprit && (
                 <>
-                  <Fact label="Introduced by">PR #{detail.culprit.pr_number}</Fact>
+                  <Fact label="Introduced by">{commitLabel(detail.culprit)}</Fact>
                   <Fact label="Author">{detail.culprit.author}</Fact>
                 </>
               )}
@@ -182,7 +183,11 @@ export const IncidentView: React.FC<IncidentViewProps> = ({
             </dl>
             {detail.source && (
               <div>
-                <p className="mb-2 text-xs text-muted">Failing code in <span className="font-mono">{detail.source.file}</span></p>
+                <p className="mb-2 text-xs text-muted">
+                  Failing code in <span className="font-mono">{detail.source.repoPath ?? detail.source.file}</span>
+                  {detail.codeOrigin === 'github' ? ' (read from GitHub)' : ' (local copy, GitHub could not be used)'}
+                </p>
+                {detail.codeNote && <p className="mb-2 text-xs text-warn">{detail.codeNote}</p>}
                 <SourceView source={detail.source} />
               </div>
             )}
@@ -262,21 +267,27 @@ export const IncidentView: React.FC<IncidentViewProps> = ({
         <section className="card">
           <CardHeader
             title="Result"
-            hint={detail.demoMode ? 'Demo mode: the pull request and Slack message are simulated.' : 'A person still reviews and merges the fix.'}
+            hint="A person still reviews and merges the fix. Nothing is deployed automatically."
           />
           <div className="grid gap-5 p-5 sm:grid-cols-3">
             <div className="flex gap-3">
               <GitPullRequest size={18} className="mt-0.5 shrink-0 text-accent" />
               <div className="min-w-0">
-                <p className="text-sm font-semibold">Draft pull request{prNumber ? ` #${prNumber}` : ''}</p>
-                <p className="mt-0.5 text-sm text-muted">Opened with the best-scoring of {detail.patches.length} candidate fixes.</p>
+                <p className="text-sm font-semibold">
+                  {detail.pr ? `Draft pull request${prNumber ? ` #${prNumber}` : ''} opened` : 'No pull request yet'}
+                </p>
+                <p className="mt-0.5 text-sm text-muted">
+                  {detail.pr ? 'Review and merge it on GitHub.' : `The best of ${detail.patches.length} candidate fixes is ready. Open a pull request from the Fix page.`}
+                </p>
               </div>
             </div>
             <div className="flex gap-3">
               <MessageSquare size={18} className="mt-0.5 shrink-0 text-accent" />
               <div className="min-w-0">
-                <p className="text-sm font-semibold">Team notified in Slack</p>
-                <p className="mt-0.5 text-sm text-muted">Includes the cause, the author and a link to the pull request.</p>
+                <p className="text-sm font-semibold">Slack message</p>
+                <p className="mt-0.5 text-sm text-muted">
+                  {detail.pr ? 'Sent when the pull request was opened (simulated).' : 'Sent once a pull request is opened.'}
+                </p>
               </div>
             </div>
             <div>
@@ -285,7 +296,7 @@ export const IncidentView: React.FC<IncidentViewProps> = ({
             </div>
           </div>
           <div className="border-t border-line px-5 py-3.5">
-            <button className="btn btn-primary" onClick={() => onNavigate('fix')}>Review the fix</button>
+            <button className="btn btn-primary" onClick={() => onNavigate('fix')}>{detail.pr ? 'See the fix' : 'Review the fix'}</button>
           </div>
         </section>
       )}

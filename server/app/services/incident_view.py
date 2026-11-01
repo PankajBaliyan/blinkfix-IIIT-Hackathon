@@ -36,7 +36,8 @@ def incident_summary(row: Dict[str, Any]) -> Dict[str, Any]:
         "createdAt": _iso(row.get("created_at")),
         "durationMs": row.get("duration_ms") or 0,
         "rollbackApproved": bool(row.get("rollback_approved")),
-        "prUrl": row.get("pr_url"),
+        "prUrl": row.get("pr_url") if row.get("pr_number") else None,
+        "prNumber": row.get("pr_number"),
     }
 
 
@@ -53,6 +54,7 @@ def build_incident_detail(incident_id: str) -> Optional[Dict[str, Any]]:
     agents = get_agent_runs(incident_id)
     findings = {a["name"]: a["findings"] for a in agents}
 
+    stored_source = _loads(row.get("source_json"), None)
     detail = incident_summary(row)
     detail.update({
         "environment": payload.get("environment"),
@@ -74,7 +76,15 @@ def build_incident_detail(incident_id: str) -> Optional[Dict[str, Any]]:
             {"ts": r["ts"], "level": r["level"], "requestId": r["request_id"], "message": r["message"]}
             for r in _loads(row.get("logs_json"), [])
         ],
-        "source": read_source_snippet(row["file"], row["line"]),
+        # The snippet saved when the incident was handled, so it shows the code Blinkfix actually read.
+        "source": stored_source or read_source_snippet(row["file"], row["line"]),
+        "codeOrigin": row.get("code_origin"),
+        "codeNote": (stored_source or {}).get("note"),
+        "pr": (
+            {"number": row.get("pr_number"), "url": row["pr_url"], "branch": row.get("pr_branch")}
+            # Incidents from before real pull requests have a made-up link and no number.
+            if row.get("pr_url") and row.get("pr_number") else None
+        ),
         "agents": agents,
         "culprit": findings.get("Git Detective"),
         "impact": findings.get("Impact Analyst"),
