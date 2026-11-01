@@ -63,7 +63,7 @@ def average_item_price(items: list) -> float:
 async def call_stripe(amount: float) -> dict:
     # Simulates the payment provider being down.
     await asyncio.sleep(0.3)
-    raise TimeoutError("Connection to api.stripe.com timed out after 5000ms")
+    raise HTTPException(status_code=504, detail="Stripe timeout")
 
 
 @router.post("/checkout")
