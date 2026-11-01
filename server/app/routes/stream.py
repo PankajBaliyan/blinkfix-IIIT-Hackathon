@@ -5,6 +5,29 @@ from sse_starlette.sse import EventSourceResponse
 from ..streaming.event_bus import event_bus
 
 router = APIRouter(prefix="/api/incidents", tags=["streaming"])
+events_router = APIRouter(prefix="/api", tags=["streaming"])
+
+
+@events_router.get("/events")
+async def dashboard_event_stream(request: Request):
+    """One stream for the dashboard. Pushes the full incident whenever any incident changes."""
+    queue = event_bus.subscribe_global()
+
+    async def event_generator():
+        try:
+            yield {"event": "connected", "data": json.dumps({"status": "stream_open"})}
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    yield await asyncio.wait_for(queue.get(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    yield {"comment": "keep-alive"}
+        finally:
+            event_bus.unsubscribe_global(queue)
+
+    return EventSourceResponse(event_generator())
+
 
 @router.get("/{incident_id}/stream")
 async def incident_event_stream(incident_id: str, request: Request):

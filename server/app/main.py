@@ -49,6 +49,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(incident.router)
 app.include_router(stream.router)
+app.include_router(stream.events_router)
 app.include_router(checkout.router)
 
 @app.get("/")
@@ -63,6 +64,7 @@ async def root():
             "POST /api/incidents/webhook/crash",
             "GET  /api/incidents/{incident_id}",
             "GET  /api/incidents/{incident_id}/stream (SSE)",
+            "GET  /api/events (SSE, all incident updates)",
             "POST /api/incidents/{incident_id}/rollback",
             "GET  /api/health",
             "POST /api/demo/checkout (buggy: TypeError)",

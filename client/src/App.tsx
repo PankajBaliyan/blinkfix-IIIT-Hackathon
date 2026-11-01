@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useIncidents } from './hooks/useIncidents';
 import { useTheme } from './hooks/useTheme';
 import { Sidebar, Page } from './components/Sidebar';
@@ -12,6 +12,13 @@ export default function App() {
   const incidents = useIncidents();
   const { theme, setTheme } = useTheme();
   const [page, setPage] = useState<Page>('incident');
+
+  // Keeps "2 min ago" labels fresh. Local clock only, no network.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick((n) => n + 1), 30_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const { list, detail, pinnedId, pinIncident, online, loaded, approve } = incidents;
   const status = detail?.status ?? list[0]?.status ?? 'STANDBY';

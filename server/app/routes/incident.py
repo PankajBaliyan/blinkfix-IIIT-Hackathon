@@ -10,6 +10,7 @@ from ..services.orchestrator import run_incident_orchestration
 from ..services.log_store import log_store
 from ..services.incident_console import print_crash_report
 from ..database import get_incident, update_incident
+from ..services.incident_events import publish_incident_update
 from ..services.incident_view import build_incident_detail, list_incident_summaries
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
@@ -73,6 +74,7 @@ async def approve_rollback(incident_id: str, request: RollbackApprovalRequest):
         raise HTTPException(status_code=404, detail="Incident not found")
 
     update_incident(incident_id, {"rollback_approved": 1})
+    await publish_incident_update(incident_id)
     return {
         "status": "rollback_approved",
         "incident_id": incident_id,

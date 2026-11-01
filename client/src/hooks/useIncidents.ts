@@ -1,20 +1,28 @@
 import { useCallback, useEffect, useState } from 'react';
 import { IncidentDetail, IncidentStatus, IncidentSummary } from '../types';
-import { approveRollback, getIncident, listIncidents } from '../services/incident.api';
-
-const LIST_POLL_MS = 1500;
-const DETAIL_POLL_MS = 700;
+import { API_BASE, approveRollback, getIncident, listIncidents } from '../services/incident.api';
 
 export const isActive = (status: IncidentStatus) => status !== 'RESOLVED' && status !== 'FAILED';
 
+/** Puts an incident at the front of the list if it is new, or updates it in place. */
+function upsert(list: IncidentSummary[], incident: IncidentSummary): IncidentSummary[] {
+  const index = list.findIndex((i) => i.id === incident.id);
+  if (index === -1) return [incident, ...list];
+  const next = list.slice();
+  next[index] = incident;
+  return next;
+}
+
 /**
  * Live view of incidents stored by the backend.
- * The list is polled to catch new crashes. The open incident is polled quickly while it is
- * still being worked on, then left alone once it is resolved.
+ *
+ * The list is loaded once, then the backend pushes every change over one event stream
+ * (/api/events), so the page never polls. If the connection drops, the browser reconnects
+ * by itself and the list is loaded again to catch anything that was missed.
  */
 export function useIncidents() {
   const [list, setList] = useState<IncidentSummary[]>([]);
-  const [detail, setDetail] = useState<IncidentDetail | null>(null);
+  const [details, setDetails] = useState<Record<string, IncidentDetail>>({});
   // null means "follow the newest incident"
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [online, setOnline] = useState(false);
@@ -23,64 +31,67 @@ export function useIncidents() {
   const currentId = pinnedId ?? list[0]?.id ?? null;
 
   useEffect(() => {
-    let stopped = false;
-    const load = async () => {
+    let closed = false;
+    const events = new EventSource(`${API_BASE}/api/events`);
+
+    events.onopen = async () => {
+      if (closed) return;
+      setOnline(true);
       try {
         const rows = await listIncidents();
-        if (stopped) return;
-        setList(rows);
-        setOnline(true);
+        if (!closed) setList(rows);
       } catch {
-        if (!stopped) setOnline(false);
+        // The stream is open; the next pushed update will fill the list in.
       } finally {
-        if (!stopped) setLoaded(true);
+        if (!closed) setLoaded(true);
       }
     };
-    load();
-    const timer = setInterval(load, LIST_POLL_MS);
+
+    events.onerror = () => {
+      if (closed) return;
+      setOnline(false);
+      setLoaded(true);
+    };
+
+    events.addEventListener('incident_updated', (e) => {
+      const incident = JSON.parse((e as MessageEvent).data) as IncidentDetail;
+      setDetails((prev) => ({ ...prev, [incident.id]: incident }));
+      setList((prev) => upsert(prev, incident));
+    });
+
     return () => {
-      stopped = true;
-      clearInterval(timer);
+      closed = true;
+      events.close();
     };
   }, []);
 
-  const detailActive = !detail || detail.id !== currentId || isActive(detail.status);
-
+  // An older incident that was never pushed in this session (for example one opened from
+  // History) is fetched once.
+  const hasDetail = currentId !== null && currentId in details;
   useEffect(() => {
-    if (!currentId) {
-      setDetail(null);
-      return;
-    }
+    if (!currentId || hasDetail) return;
     let stopped = false;
-    const load = async () => {
-      try {
-        const next = await getIncident(currentId);
-        if (!stopped) setDetail(next);
-      } catch {
-        // The list poll reports connectivity; keep showing the last good detail.
-      }
-    };
-    load();
-    if (!detailActive) return () => { stopped = true; };
-    const timer = setInterval(load, DETAIL_POLL_MS);
+    getIncident(currentId)
+      .then((incident) => {
+        if (!stopped) setDetails((prev) => ({ ...prev, [incident.id]: incident }));
+      })
+      .catch(() => {
+        // Connectivity is reported by the stream.
+      });
     return () => {
       stopped = true;
-      clearInterval(timer);
     };
-  }, [currentId, detailActive]);
+  }, [currentId, hasDetail]);
 
   const approve = useCallback(async () => {
     if (!currentId) return;
+    // The backend pushes the updated incident, which refreshes the page.
     await approveRollback(currentId);
-    setDetail(await getIncident(currentId));
   }, [currentId]);
-
-  // Only expose a detail that belongs to the incident being shown.
-  const shown = detail && detail.id === currentId ? detail : null;
 
   return {
     list,
-    detail: shown,
+    detail: currentId ? details[currentId] ?? null : null,
     currentId,
     pinnedId,
     pinIncident: setPinnedId,

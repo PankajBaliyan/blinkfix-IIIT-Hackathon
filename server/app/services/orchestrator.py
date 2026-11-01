@@ -14,6 +14,7 @@ from ..services.patch_validator import rank_and_select_winner
 from ..services.github_service import create_draft_pull_request
 from ..services.slack_service import send_slack_incident_alert
 from ..streaming.event_bus import event_bus
+from ..services.incident_events import publish_incident_update
 from ..database import save_incident, update_incident, save_agent_run, save_patches
 
 logger = logging.getLogger("blinkfix.orchestrator")
@@ -31,6 +32,7 @@ async def run_incident_orchestration(
         logger.exception("Incident %s failed", incident_id)
         update_incident(incident_id, {"status": "FAILED"})
         await event_bus.broadcast(incident_id, "incident_failed", {"incident_id": incident_id, "error": str(e)})
+        await publish_incident_update(incident_id)
 
 
 async def _orchestrate(incident_id: str, payload: CrashPayload, logs: List[Dict[str, Any]]):
@@ -51,6 +53,7 @@ async def _orchestrate(incident_id: str, payload: CrashPayload, logs: List[Dict[
         "payload_json": payload.model_dump_json(),
         "logs": logs,
     })
+    await publish_incident_update(incident_id)
 
     await event_bus.broadcast(incident_id, "incident_started", {
         "incident_id": incident_id,
@@ -87,6 +90,7 @@ async def _orchestrate(incident_id: str, payload: CrashPayload, logs: List[Dict[
             mitigation = res.findings
 
     update_incident(incident_id, {"status": "MITIGATION_READY", "culprit_commit": culprit_commit})
+    await publish_incident_update(incident_id)
     await event_bus.broadcast(incident_id, "mitigation_ready", {
         "action": mitigation.get("action"),
         "target_commit": culprit_commit,
@@ -98,6 +102,7 @@ async def _orchestrate(incident_id: str, payload: CrashPayload, logs: List[Dict[
     candidates = build_candidate_patches(payload)
     update_incident(incident_id, {"status": "SPECULATIVE_REPAIR"})
     save_patches(incident_id, [p.model_dump() for p in candidates])
+    await publish_incident_update(incident_id)
     await event_bus.broadcast(incident_id, "repair_started", {
         "candidate_count": len(candidates),
         "target_file": payload.file,
@@ -107,15 +112,18 @@ async def _orchestrate(incident_id: str, payload: CrashPayload, logs: List[Dict[
         logger.warning("No candidate fix available for incident %s (%s)", incident_id, payload.exceptionType)
         update_incident(incident_id, {"status": "FAILED"})
         await event_bus.broadcast(incident_id, "incident_failed", {"incident_id": incident_id, "error": "No candidate fix"})
+        await publish_incident_update(incident_id)
         return
 
     # 4. Validation gates and ranking
     await asyncio.sleep(0.35)
     update_incident(incident_id, {"status": "VALIDATING"})
+    await publish_incident_update(incident_id)
     language = "python" if payload.file.endswith(".py") else "javascript"
     validated_patches = rank_and_select_winner(candidates, language=language)
     winning_patch = next((p for p in validated_patches if p.isWinner), validated_patches[0])
     save_patches(incident_id, [p.model_dump() for p in validated_patches])
+    await publish_incident_update(incident_id)
 
     await event_bus.broadcast(incident_id, "patch_verified", {
         "winning_patch_id": winning_patch.id,
@@ -155,6 +163,7 @@ async def _orchestrate(incident_id: str, payload: CrashPayload, logs: List[Dict[
         "winning_patch_id": winning_patch.id,
         "pr_url": pr_result["pr_url"],
     })
+    await publish_incident_update(incident_id)
 
     await event_bus.broadcast(incident_id, "pr_created", pr_result)
     await event_bus.broadcast(incident_id, "incident_completed", {
