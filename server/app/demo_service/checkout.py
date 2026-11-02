@@ -51,6 +51,8 @@ def lookup_currency(code: Optional[str]):
 def convert_to_cents(cart: CheckoutRequest) -> int:
     currency = lookup_currency(cart.currency)
     # BUG: currency is None when the cart has no currency, so this line raises a TypeError.
+    if currency is None:
+        raise HTTPException(status_code=400, detail="Unsupported or missing currency")
     rate = currency["exchange_rate"]
     return round(cart.total * rate * 100)
 
